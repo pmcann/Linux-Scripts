@@ -78,7 +78,7 @@ echo "🔧 Pulling Kubernetes images..."
 kubeadm config images pull
 
 echo "🔧 Initializing Kubernetes master node..."
-kubeadm init
+sudo kubeadm init --pod-network-cidr=10.244.0.0/16
 
 echo "🔧 Setting up kubeconfig for non-root user..."
 
