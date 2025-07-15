@@ -100,6 +100,10 @@ su - $REAL_USER -c "kubectl apply -f https://raw.githubusercontent.com/projectca
 
 echo "✅ Calico installed."
 
+mkdir -p $HOME/.kube
+sudo cp /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
 echo "🔧 Checking cluster status..."
 
 su - $REAL_USER -c "kubectl get po -n kube-system"
