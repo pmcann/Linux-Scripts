@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Exit immediately on any error
+# Exit on any error
 set -e
 
 # Check for root privileges
@@ -35,15 +35,16 @@ sysctl --system
 apt update
 apt-get update
 
-# Install required packages
+# Install dependencies
 apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
 
-# Add Kubernetes apt repository (classic Google repo)
-curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+# Add Kubernetes apt repository
+mkdir -p /etc/apt/keyrings
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.32/deb/Release.key \
+    | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
-cat <<EOF >/etc/apt/sources.list.d/kubernetes.list
-deb https://apt.kubernetes.io/ kubernetes-xenial main
-EOF
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.32/deb/ /" \
+    > /etc/apt/sources.list.d/kubernetes.list
 
 apt-get update
 
@@ -61,7 +62,18 @@ systemctl enable containerd
 # Install Kubernetes components
 apt-get install -y kubelet kubeadm kubectl
 
-systemctl enable kubelet
-systemctl start kubelet
+# Print Kubernetes versions
+kubeadm version
+kubelet --version
+kubectl version --client
 
+systemctl restart kubelet.service
+systemctl enable kubelet.service
 
+# JOIN THE CLUSTER
+# Replace the line below with the join command you get from the master after kubeadm init.
+# Example:
+# kubeadm join <MASTER_IP>:6443 --token <token> \
+#     --discovery-token-ca-cert-hash sha256:<hash>
+
+# kubeadm token create --print-join-command  (run this on the master node)
