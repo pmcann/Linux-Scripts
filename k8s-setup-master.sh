@@ -74,7 +74,7 @@ systemctl enable kubelet.service
 kubeadm config images pull
 
 # Initialize the Kubernetes master node
-kubeadm init --pod-network-cidr=192.168.0.0/16
+sudo kubeadm init --pod-network-cidr=192.168.0.0/16 --v=5
 
 # Set up kubeconfig for non-root user
 REAL_USER=${SUDO_USER:-ubuntu}
