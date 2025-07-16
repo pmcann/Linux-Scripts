@@ -88,15 +88,14 @@ chown -R "$REAL_USER:$REAL_USER" "$USER_HOME/.kube"
 export KUBECONFIG="$USER_HOME/.kube/config"
 
 # Wait for kube-apiserver to become reachable
-until kubectl version --short &>/dev/null; do
+until kubectl version >/dev/null 2>&1; do
+    echo "Waiting for API server..."
     sleep 5
 done
-# Wait for Calico pods to be Running
-echo "Waiting for Calico pods..."
-until kubectl get pods -n kube-system | grep calico | grep -q Running; do
-    kubectl get pods -n kube-system
-    sleep 5
-done
+
+
+# Install Calico network plugin
+kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.3/manifests/calico.yaml
 
 # Wait for CoreDNS to be scheduled
 echo "Waiting for CoreDNS..."
@@ -104,20 +103,6 @@ until kubectl get pods -n kube-system | grep coredns | grep -q Running; do
     kubectl get pods -n kube-system
     sleep 5
 done
-
-# Wait for node to become Ready
-echo "Waiting for node to become Ready..."
-until kubectl get nodes | grep control-plane | grep -q Ready; do
-    kubectl get nodes
-    sleep 5
-done
-
-# Install Calico network plugin
-kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.3/manifests/calico.yaml
-
-# Check cluster status
-kubectl get po -n kube-system
-kubectl get nodes
 
 # Deploy a test nginx pod
 kubectl run testpod --image=nginx --restart=Never
