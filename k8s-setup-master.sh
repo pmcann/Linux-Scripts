@@ -83,15 +83,21 @@ kubeadm init
 echo "🔧 Setting up kubeconfig for non-root user..."
 
 # Automatically detect the real user
-REAL_USER=$(logname)
-USER_HOME=$(eval echo "~$REAL_USER")
+# REAL_USER=$(logname)
+# USER_HOME=$(eval echo "~$REAL_USER")
 
-echo "Detected non-root user: $REAL_USER"
-echo "Configuring kubeconfig in $USER_HOME/.kube"
+# echo "Detected non-root user: $REAL_USER"
+# echo "Configuring kubeconfig in $USER_HOME/.kube"
 
-mkdir -p $USER_HOME/.kube
-cp -i /etc/kubernetes/admin.conf $USER_HOME/.kube/config
-chown $REAL_USER:$REAL_USER $USER_HOME/.kube/config
+# mkdir -p $USER_HOME/.kube
+# cp -i /etc/kubernetes/admin.conf $USER_HOME/.kube/config
+# chown $REAL_USER:$REAL_USER $USER_HOME/.kube/config
+
+echo "🔧 Run these commands so kubectl works as your user:"
+
+mkdir -p $HOME/.kube
+sudo cp /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
 echo "✅ kubeconfig setup complete for user $REAL_USER"
 
@@ -108,3 +114,8 @@ su - $REAL_USER -c "kubectl get po -n kube-system"
 su - $REAL_USER -c "kubectl get nodes"
 
 echo "🎉 Kubernetes master node setup is complete!"
+
+echo "🔧 Installing nginx test pod"
+
+kubectl run testpod --image=nginx --restart=Never
+kubectl get pod testpod
