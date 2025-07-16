@@ -64,7 +64,4 @@ apt-get install -y kubelet kubeadm kubectl
 systemctl enable kubelet
 systemctl start kubelet
 
-# Print Kubernetes component versions (optional)
-kubeadm version
-kubelet --version
-kubectl version --client
+
