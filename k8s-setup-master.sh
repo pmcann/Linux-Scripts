@@ -3,19 +3,17 @@
 # Exit on any error
 set -e
 
-echo "🔧 Checking for root privileges..."
+# Check for root privileges
 if [[ $EUID -ne 0 ]]; then
-    echo "❌ Please run this script as root, e.g. sudo ./k8s-setup-master.sh"
+    echo "Please run this script as root, e.g. sudo ./k8s-setup-master.sh"
     exit 1
 fi
 
-echo "✅ Running as root."
-
-echo "🔧 Disabling swap..."
+# Disable swap (required for Kubernetes)
 swapoff -a
 sed -i '/swap/d' /etc/fstab
 
-echo "🔧 Configuring kernel modules..."
+# Configure kernel modules for Kubernetes networking
 cat <<EOF > /etc/modules-load.d/k8s.conf
 overlay
 br_netfilter
@@ -24,7 +22,7 @@ EOF
 modprobe overlay
 modprobe br_netfilter
 
-echo "🔧 Setting sysctl parameters..."
+# Set sysctl parameters required for Kubernetes networking
 cat <<EOF > /etc/sysctl.d/k8s.conf
 net.bridge.bridge-nf-call-iptables  = 1
 net.bridge.bridge-nf-call-ip6tables = 1
@@ -33,16 +31,14 @@ EOF
 
 sysctl --system
 
-echo "✅ Kernel modules and sysctl settings applied."
-
-echo "🔧 Updating apt repositories..."
+# Update package repositories
 apt update
 apt-get update
 
-echo "🔧 Installing required packages..."
+# Install dependencies
 apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
 
-echo "🔧 Adding Kubernetes apt repository..."
+# Add Kubernetes apt repository
 mkdir -p /etc/apt/keyrings
 curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.32/deb/Release.key \
     | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
@@ -52,10 +48,10 @@ echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.
 
 apt-get update
 
-echo "🔧 Installing containerd..."
+# Install containerd
 apt-get install -y containerd
 
-echo "🔧 Configuring containerd..."
+# Configure containerd to use systemd cgroups
 mkdir -p /etc/containerd
 containerd config default > /etc/containerd/config.toml
 sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
@@ -63,10 +59,10 @@ sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.to
 systemctl restart containerd
 systemctl enable containerd
 
-echo "🔧 Installing Kubernetes components..."
+# Install Kubernetes components
 apt-get install -y kubelet kubeadm kubectl
 
-echo "✅ Kubernetes versions:"
+# Print Kubernetes versions
 kubeadm version
 kubelet --version
 kubectl version --client
@@ -74,48 +70,37 @@ kubectl version --client
 systemctl restart kubelet.service
 systemctl enable kubelet.service
 
-echo "🔧 Pulling Kubernetes images..."
+# Pre-pull Kubernetes images to save time during init
 kubeadm config images pull
 
-echo "🔧 Initializing Kubernetes master node..."
+# Initialize the Kubernetes master node
 kubeadm init
 
-echo "🔧 Setting up kubeconfig for non-root user..."
+# Set up kubeconfig for non-root user
+REAL_USER=${SUDO_USER:-ubuntu}
+USER_HOME=$(eval echo "~$REAL_USER")
 
-# Automatically detect the real user
-# REAL_USER=$(logname)
-# USER_HOME=$(eval echo "~$REAL_USER")
+# Create .kube directory in the user's home
+mkdir -p "$USER_HOME/.kube"
+cp /etc/kubernetes/admin.conf "$USER_HOME/.kube/config"
+chown -R "$REAL_USER:$REAL_USER" "$USER_HOME/.kube"
 
-# echo "Detected non-root user: $REAL_USER"
-# echo "Configuring kubeconfig in $USER_HOME/.kube"
+export KUBECONFIG="$USER_HOME/.kube/config"
 
-# mkdir -p $USER_HOME/.kube
-# cp -i /etc/kubernetes/admin.conf $USER_HOME/.kube/config
-# chown $REAL_USER:$REAL_USER $USER_HOME/.kube/config
+# Wait for kube-apiserver to become reachable
+until kubectl version --short &>/dev/null; do
+    sleep 5
+done
 
-echo "🔧 Run these commands so kubectl works as your user:"
+# Install Calico network plugin
+kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.3/manifests/calico.yaml
 
-mkdir -p $HOME/.kube
-sudo cp /etc/kubernetes/admin.conf $HOME/.kube/config
-sudo chown $(id -u):$(id -g) $HOME/.kube/config
+# Check cluster status
+kubectl get po -n kube-system
+kubectl get nodes
 
-echo "✅ kubeconfig setup complete for user $REAL_USER"
-
-echo "🔧 Installing Calico network plugin..."
-su - $REAL_USER -c "kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.3/manifests/calico.yaml"
-
-
-
-echo "✅ Calico installed."
-
-echo "🔧 Checking cluster status..."
-
-su - $REAL_USER -c "kubectl get po -n kube-system"
-su - $REAL_USER -c "kubectl get nodes"
-
-echo "🎉 Kubernetes master node setup is complete!"
-
-echo "🔧 Installing nginx test pod"
-
+# Deploy a test nginx pod
 kubectl run testpod --image=nginx --restart=Never
+
+# Verify test pod status
 kubectl get pod testpod
