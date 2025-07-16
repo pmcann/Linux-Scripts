@@ -78,7 +78,7 @@ echo "🔧 Pulling Kubernetes images..."
 kubeadm config images pull
 
 echo "🔧 Initializing Kubernetes master node..."
-sudo kubeadm init --pod-network-cidr=192.168.0.0/16
+kubeadm init
 
 echo "🔧 Setting up kubeconfig for non-root user..."
 
@@ -96,13 +96,11 @@ chown $REAL_USER:$REAL_USER $USER_HOME/.kube/config
 echo "✅ kubeconfig setup complete for user $REAL_USER"
 
 echo "🔧 Installing Calico network plugin..."
-su - $REAL_USER -c "kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.25.0/manifests/calico.yaml"
+su - $REAL_USER -c "kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.3/manifests/calico.yaml"
+
+
 
 echo "✅ Calico installed."
-
-mkdir -p $HOME/.kube
-sudo cp /etc/kubernetes/admin.conf $HOME/.kube/config
-sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
 echo "🔧 Checking cluster status..."
 
