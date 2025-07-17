@@ -70,19 +70,6 @@ kubectl version --client
 systemctl restart kubelet.service
 systemctl enable kubelet.service
 
-# Wait for the pod to exist
-while ! kubectl get pod testpod 2>/dev/null | grep -q Running; do
-  echo "Waiting for testpod to be running..."
-  sleep 5
-done
-
-# Delete old service if it exists
-kubectl delete svc testpod-service --ignore-not-found
-
-# Create NodePort service if it doesn't exist
-if ! kubectl get svc nginx-nodeport > /dev/null 2>&1; then
-  kubectl expose pod testpod --type=NodePort --port=80 --name=nginx-nodeport
-fi
 
 # JOIN THE CLUSTER
 # Replace the line below with the join command you get from the master after kubeadm init.
