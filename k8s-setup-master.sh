@@ -121,12 +121,19 @@ if ! kubectl get svc nginx-nodeport > /dev/null 2>&1; then
   kubectl expose pod testpod --type=NodePort --port=80 --name=nginx-nodeport
 fi
 
+# install unzip
+apt update
+apt install -y unzip curl
+
 # Install AWS CLI v2 (ARM64)
 cd /tmp
 curl -s "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip"
 unzip -q awscliv2.zip
 ./aws/install -i /usr/local/aws-cli -b /usr/local/bin
 rm -rf aws awscliv2.zip
+
+
+
 
 # Create ECR pull secret for Kubernetes
 kubectl create secret docker-registry ecr-secret \
