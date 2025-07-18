@@ -22,7 +22,7 @@ spec:
         env:
         - name: SPRING_PROFILES_ACTIVE
           value: "default"
-        imagePullSecrets:
-        - name: ecr-secret
+      imagePullSecrets:
+      - name: ecr-secret
 
 
