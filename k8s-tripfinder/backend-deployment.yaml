@@ -23,9 +23,10 @@ spec:
         - name: SPRING_PROFILES_ACTIVE
           value: "default"
         - name: JAVA_TOOL_OPTIONS
-          value: "-Dsun.net.inetaddr.ttl=30 -Dsun.net.spi.nameservice.provider.1=dns,sun"  
+          value: "-Dsun.net.inetaddr.ttl=30 -Dsun.net.spi.nameservice.provider.1=dns,sun"
       imagePullSecrets:
       - name: ecr-secret
+
 
 
 
