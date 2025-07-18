@@ -60,7 +60,14 @@ systemctl restart containerd
 systemctl enable containerd
 
 # Install Kubernetes components
-apt-get install -y kubelet kubeadm kubectl
+# apt-get install -y kubelet kubeadm kubectl <installs old versions>
+
+# find latest versions 'apt-cache madison kubelet | head -n 10'
+# Install Kubernetes components using version found above
+VERSION=1.32.7-1.1
+apt-get update
+apt-get install -y kubelet=$VERSION kubeadm=$VERSION kubectl=$VERSION
+apt-mark hold kubelet kubeadm kubectl
 
 # Print Kubernetes versions
 kubeadm version
