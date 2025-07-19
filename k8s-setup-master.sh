@@ -128,28 +128,11 @@ if ! kubectl get svc nginx-nodeport > /dev/null 2>&1; then
   kubectl expose pod testpod --type=NodePort --port=80 --name=nginx-nodeport
 fi
 
-# Install unzip with retries
-max_retries=5
-retry_delay=3
-attempt=1
+# Install unzip
 
-while ! command -v unzip >/dev/null 2>&1; do
-    echo "Attempt $attempt to install unzip..."
-
-    apt-get update -qq
-    if apt-get install -y unzip; then
-        echo "unzip installed successfully."
-        break
-    fi
-
-    if (( attempt >= max_retries )); then
-        echo "Failed to install unzip after $attempt attempts."
-        exit 1
-    fi
-
-    attempt=$((attempt + 1))
-    sleep $retry_delay
-done
+sleep 15
+apt-get install -y unzip
+sleep 15
 
 # Install AWS CLI v2 (ARM64)
 cd /tmp
