@@ -129,8 +129,21 @@ if ! kubectl get svc nginx-nodeport > /dev/null 2>&1; then
 fi
 
 # install unzip
-apt update
-apt install -y unzip curl
+max_retries=5
+retry_delay=3
+attempt=1
+
+while ! command -v unzip >/dev/null 2>&1; do
+    apt-get update -qq && apt-get install -y unzip curl >/dev/null 2>&1 && break
+
+    if (( attempt >= max_retries )); then
+        exit 1
+    fi
+
+    attempt=$((attempt + 1))
+    sleep $retry_delay
+done
+
 
 # Install AWS CLI v2 (ARM64)
 cd /tmp
@@ -138,8 +151,6 @@ curl -s "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2
 unzip -q awscliv2.zip
 ./aws/install -i /usr/local/aws-cli -b /usr/local/bin
 rm -rf aws awscliv2.zip
-
-
 
 
 # Create ECR pull secret for Kubernetes
