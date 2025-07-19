@@ -130,9 +130,9 @@ fi
 
 # Install unzip
 
-sleep 15
+sleep 5
 apt-get install -y unzip
-sleep 15
+sleep 10
 
 # Install AWS CLI v2 (ARM64)
 cd /tmp
