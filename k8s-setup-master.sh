@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# Exit on any error
 set -e
 
 # Check for root privileges
@@ -8,12 +9,12 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-# Disable swap
+# Disable swap (required for Kubernetes)
 swapoff -a
 sed -i '/swap/d' /etc/fstab
 
-# Kernel modules
-cat <<EOF | tee /etc/modules-load.d/k8s.conf
+# Configure kernel modules for Kubernetes networking
+cat <<EOF > /etc/modules-load.d/k8s.conf
 overlay
 br_netfilter
 EOF
@@ -21,89 +22,117 @@ EOF
 modprobe overlay
 modprobe br_netfilter
 
-# Sysctl config
-cat <<EOF | tee /etc/sysctl.d/k8s.conf
-net.bridge.bridge-nf-call-iptables=1
-net.bridge.bridge-nf-call-ip6tables=1
-net.ipv4.ip_forward=1
+# Set sysctl parameters required for Kubernetes networking
+cat <<EOF > /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-iptables  = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv4.ip_forward                 = 1
 EOF
 
 sysctl --system
 
-# Install base deps
+# Update package repositories
 apt update
-apt install -y apt-transport-https ca-certificates curl gnupg lsb-release unzip
+apt-get update
 
-# Add Kubernetes repo
+# Install dependencies
+apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
+
+# Add Kubernetes apt repository
 mkdir -p /etc/apt/keyrings
-curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.32/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.32/deb/ /" > /etc/apt/sources.list.d/kubernetes.list
-apt update
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.32/deb/Release.key \
+    | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.32/deb/ /" \
+    > /etc/apt/sources.list.d/kubernetes.list
+
+apt-get update
 
 # Install containerd
-apt install -y containerd
+apt-get install -y containerd
+
+# Configure containerd to use systemd cgroups
 mkdir -p /etc/containerd
 containerd config default > /etc/containerd/config.toml
 sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+
 systemctl restart containerd
 systemctl enable containerd
 
 # Install Kubernetes components
-VERSION=${VERSION:-"1.32.7-1.1"}
-apt install -y kubelet=$VERSION kubeadm=$VERSION kubectl=$VERSION
+# apt-get install -y kubelet kubeadm kubectl <installs old versions>
+
+# find latest versions 'apt-cache madison kubelet | head -n 10'
+# Install Kubernetes components using version found above
+VERSION=1.32.7-1.1
+apt-get update
+apt-get install -y kubelet=$VERSION kubeadm=$VERSION kubectl=$VERSION
 apt-mark hold kubelet kubeadm kubectl
 
-systemctl enable kubelet
+# Print Kubernetes versions
+kubeadm version
+kubelet --version
+kubectl version --client
 
-# Pre-pull images
+systemctl restart kubelet.service
+systemctl enable kubelet.service
+
+# Pre-pull Kubernetes images to save time during init
 kubeadm config images pull
 
-# Initialize Kubernetes control plane
-kubeadm init --pod-network-cidr=192.168.0.0/16 --v=5
+# Initialize the Kubernetes master node
+sudo kubeadm init --pod-network-cidr=192.168.0.0/16 --v=5
 
-# Setup kubeconfig for user and root
+# Set up kubeconfig for non-root user
 REAL_USER=${SUDO_USER:-ubuntu}
 USER_HOME=$(eval echo "~$REAL_USER")
 
+# Create .kube directory in the user's home
 mkdir -p "$USER_HOME/.kube"
 cp /etc/kubernetes/admin.conf "$USER_HOME/.kube/config"
 chown -R "$REAL_USER:$REAL_USER" "$USER_HOME/.kube"
 
-mkdir -p /root/.kube
-cp /etc/kubernetes/admin.conf /root/.kube/config
+export KUBECONFIG="$USER_HOME/.kube/config"
 
-export KUBECONFIG=/etc/kubernetes/admin.conf
-
-# Wait for API server
+# Wait for kube-apiserver to become reachable
 until kubectl version >/dev/null 2>&1; do
     echo "Waiting for API server..."
     sleep 5
 done
 
-# Install Calico networking
+
+# Install Calico network plugin
 kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.3/manifests/calico.yaml
 
-# Wait for Calico to be ready
-echo "Waiting for Calico nodes to be Ready..."
-kubectl wait --for=condition=Ready pod -l k8s-app=calico-node -n kube-system --timeout=180s
-
-# Wait for CoreDNS to be ready
+# Wait for CoreDNS to be scheduled
 echo "Waiting for CoreDNS..."
-kubectl wait --for=condition=Ready pod -l k8s-app=kube-dns -n kube-system --timeout=180s
-
-# Deploy test nginx pod
-kubectl delete pod testpod --ignore-not-found
-kubectl run testpod --image=nginx --restart=Never
-
-# Wait for test pod
-echo "Waiting for testpod..."
-until kubectl get pod testpod | grep -q Running; do
+until kubectl get pods -n kube-system | grep coredns | grep -q Running; do
+    kubectl get pods -n kube-system
     sleep 5
 done
 
-# Create NodePort service
+# Deploy a test nginx pod
+kubectl run testpod --image=nginx --restart=Never
+
+# Wait for the pod to exist
+while ! kubectl get pod testpod 2>/dev/null | grep -q Running; do
+  echo "Waiting for testpod to be running..."
+  sleep 5
+done
+
+# Delete old service if it exists
 kubectl delete svc testpod-service --ignore-not-found
-kubectl expose pod testpod --type=NodePort --port=80 --name=nginx-nodeport || true
+
+# Create NodePort service if it doesn't exist
+if ! kubectl get svc nginx-nodeport > /dev/null 2>&1; then
+  kubectl expose pod testpod --type=NodePort --port=80 --name=nginx-nodeport
+fi
+
+# Install unzip
+
+sleep 5
+apt-get install -y unzip
+sleep 10
 
 # Install AWS CLI v2 (ARM64)
 cd /tmp
@@ -112,13 +141,10 @@ unzip -q awscliv2.zip
 ./aws/install -i /usr/local/aws-cli -b /usr/local/bin
 rm -rf aws awscliv2.zip
 
-# Create ECR pull secret
+
+# Create ECR pull secret for Kubernetes
 kubectl create secret docker-registry ecr-secret \
   --docker-server=374965728115.dkr.ecr.us-east-1.amazonaws.com \
   --docker-username=AWS \
   --docker-password="$(aws ecr get-login-password --region us-east-1)" \
   --docker-email=unused@example.com || echo "ECR secret already exists or failed to create"
-
-echo "Kubernetes master node setup complete."
-
-
