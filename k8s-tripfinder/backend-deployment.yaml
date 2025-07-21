@@ -27,7 +27,7 @@ spec:
           value: "default"
         - name: JAVA_TOOL_OPTIONS
           value: "-Dsun.net.inetaddr.ttl=30 -Dsun.net.spi.nameservice.provider.1=dns,sun"
-          - name: AMADEUS_CLIENT_ID
+        - name: AMADEUS_CLIENT_ID
           valueFrom:
             secretKeyRef:
               name: amadeus-secret
