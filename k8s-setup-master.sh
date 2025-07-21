@@ -48,6 +48,14 @@ echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.
 
 apt-get update
 
+# DNS FIX: replace systemd stub resolver with VPC DNS
+echo "Configuring resolv.conf with AWS VPC DNS..."
+systemctl disable systemd-resolved
+systemctl stop systemd-resolved
+rm -f /etc/resolv.conf
+echo 'nameserver 172.31.0.2' > /etc/resolv.conf
+
+
 # Install containerd
 apt-get install -y containerd
 
