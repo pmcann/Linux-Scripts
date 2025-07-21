@@ -81,7 +81,7 @@ systemctl enable kubelet.service
 kubeadm config images pull
 
 # Initialize the Kubernetes master node
-sudo kubeadm init --pod-network-cidr=192.168.0.0/16 --v=5
+kubeadm init --pod-network-cidr=10.244.0.0/16
 
 # Set up kubeconfig for non-root user
 REAL_USER=${SUDO_USER:-ubuntu}
@@ -101,8 +101,9 @@ until kubectl version >/dev/null 2>&1; do
 done
 
 
-# Install Calico network plugin
-kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.3/manifests/calico.yaml
+# Install Flannel network plugin
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+
 
 # Wait for CoreDNS to be scheduled
 echo "Waiting for CoreDNS..."
