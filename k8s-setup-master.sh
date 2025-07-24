@@ -161,3 +161,9 @@ kubectl create secret docker-registry ecr-secret \
   --docker-username=AWS \
   --docker-password="$(aws ecr get-login-password --region us-east-1)" \
   --docker-email=unused@example.com || echo "ECR secret already exists or failed to create"
+
+sleep 3
+
+# get docker images from ECR
+kubectl apply -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-tripfinder/backend.yaml
+kubectl apply -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-tripfinder/frontend.yaml
