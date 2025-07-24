@@ -1,0 +1,45 @@
+# Tripfinder Frontend Deployment + Service
+# Version: v1.0.1
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tripfinder-frontend
+  labels:
+    app: tripfinder-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tripfinder-frontend
+  template:
+    metadata:
+      labels:
+        app: tripfinder-frontend
+    spec:
+      containers:
+        - name: tripfinder-frontend
+          image: 374965728115.dkr.ecr.us-east-1.amazonaws.com/tripfinder-frontend:latest
+          ports:
+            - containerPort: 80
+      imagePullSecrets:
+        - name: ecr-secret
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: tripfinder-frontend-service
+  labels:
+    app: tripfinder-frontend
+spec:
+  type: NodePort
+  selector:
+    app: tripfinder-frontend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+      nodePort: 30081
+
