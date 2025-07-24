@@ -1,0 +1,53 @@
+# Tripfinder Backend Deployment
+# Version: v1.0.2
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tripfinder-backend
+  labels:
+    app: tripfinder-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tripfinder-backend
+  template:
+    metadata:
+      labels:
+        app: tripfinder-backend
+    spec:
+      dnsPolicy: None
+      dnsConfig:
+        nameservers:
+          - 8.8.8.8
+          - 1.1.1.1
+      containers:
+        - name: tripfinder-backend
+          image: 374965728115.dkr.ecr.us-east-1.amazonaws.com/tripfinder-backend:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "default"
+            - name: JAVA_TOOL_OPTIONS
+              value: "-Dsun.net.inetaddr.ttl=30 -Dsun.net.spi.nameservice.provider.1=dns,sun"
+      imagePullSecrets:
+        - name: ecr-secret
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: tripfinder-backend-service
+spec:
+  selector:
+    app: tripfinder-backend
+  type: NodePort
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30080
+
+
