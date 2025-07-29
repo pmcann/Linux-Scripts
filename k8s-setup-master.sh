@@ -147,6 +147,38 @@ sleep 5
 apt-get install -y unzip
 sleep 10
 
+# Install Helm 
+echo "[BOOTSTRAP] Installing Helm..." | tee -a /var/log/k8s-bootstrap.log
+cd /tmp
+curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+chmod 700 get_helm.sh
+./get_helm.sh >> /var/log/k8s-bootstrap.log 2>&1
+rm -f get_helm.sh
+# Confirm install (log Helm version if successful)
+helm version >> /var/log/k8s-bootstrap.log 2>&1 || echo "[WARN] Helm version check failed" >> /var/log/k8s-bootstrap.log
+
+# Add Traefik Helm repo and prepare namespace
+echo "[BOOTSTRAP] Adding Traefik Helm repo..." | tee -a /var/log/k8s-bootstrap.log
+helm repo add traefik https://traefik.github.io/charts >> /var/log/k8s-bootstrap.log 2>&1
+helm repo update >> /var/log/k8s-bootstrap.log 2>&1
+# Create 'traefik' namespace if it doesn't exist
+kubectl get namespace traefik >/dev/null 2>&1 || kubectl create namespace traefik
+
+# Install Traefik via Helm using NodePort
+echo "[BOOTSTRAP] Installing Traefik ingress controller..." | tee -a /var/log/k8s-bootstrap.log
+helm install traefik traefik/traefik \
+  --namespace traefik \
+  --set service.type=NodePort \
+  --set ingressClass.enabled=true \
+  --set ingressClass.isDefaultClass=true \
+  --set service.nodePorts.http=32080 \
+  --set service.nodePorts.https=32443 \
+  >> /var/log/k8s-bootstrap.log 2>&1
+
+# Apply Ingress definition for Tripfinder
+kubectl apply -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-tripfinder/tripfinder-ingress.yaml
+
+
 # Install AWS CLI v2 (ARM64)
 cd /tmp
 curl -s "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip"
