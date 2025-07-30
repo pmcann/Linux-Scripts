@@ -35,6 +35,8 @@ sysctl --system
 apt update
 apt-get update
 
+sleep 5
+
 # Install dependencies
 apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
 
@@ -47,6 +49,7 @@ echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.
     > /etc/apt/sources.list.d/kubernetes.list
 
 apt-get update
+sleep 5
 
 # DNS FIX: replace systemd stub resolver with VPC DNS and public fallback
 echo "Configuring resolv.conf with AWS VPC DNS and Google fallback..."
@@ -58,10 +61,12 @@ nameserver 172.31.0.2
 nameserver 8.8.8.8
 EOF
 
-
+sleep 5
 
 # Install containerd
 apt-get install -y containerd
+
+sleep 5
 
 # Configure containerd to use systemd cgroups
 mkdir -p /etc/containerd
@@ -69,15 +74,20 @@ containerd config default > /etc/containerd/config.toml
 sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
 
 systemctl restart containerd
+sleep 5
+
 systemctl enable containerd
 
 # Install Kubernetes components
 # apt-get install -y kubelet kubeadm kubectl <installs old versions>
 
+sleep 3
+
 # find latest versions 'apt-cache madison kubelet | head -n 10'
 # Install Kubernetes components using version found above
 VERSION=1.32.7-1.1
 apt-get update
+sleep 3
 apt-get install -y kubelet=$VERSION kubeadm=$VERSION kubectl=$VERSION
 apt-mark hold kubelet kubeadm kubectl
 
@@ -87,6 +97,7 @@ kubelet --version
 kubectl version --client
 
 systemctl restart kubelet.service
+sleep 5
 systemctl enable kubelet.service
 
 # Pre-pull Kubernetes images to save time during init
@@ -115,7 +126,7 @@ done
 
 # Install Flannel network plugin
 kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
-
+sleep 5
 
 # Wait for CoreDNS to be scheduled
 echo "Waiting for CoreDNS..."
@@ -154,6 +165,8 @@ curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scrip
 chmod 700 get_helm.sh
 ./get_helm.sh >> /var/log/k8s-bootstrap.log 2>&1
 rm -f get_helm.sh
+# Give Helm a moment to initialize
+sleep 3
 # Confirm install (log Helm version if successful)
 helm version >> /var/log/k8s-bootstrap.log 2>&1 || echo "[WARN] Helm version check failed" >> /var/log/k8s-bootstrap.log
 
@@ -163,6 +176,9 @@ helm repo add traefik https://traefik.github.io/charts >> /var/log/k8s-bootstrap
 helm repo update >> /var/log/k8s-bootstrap.log 2>&1
 # Create 'traefik' namespace if it doesn't exist
 kubectl get namespace traefik >/dev/null 2>&1 || kubectl create namespace traefik
+
+# Short wait to avoid Helm failing due to race condition
+sleep 3
 
 # Install Traefik via Helm using NodePort
 echo "[BOOTSTRAP] Installing Traefik ingress controller..." | tee -a /var/log/k8s-bootstrap.log
@@ -175,6 +191,15 @@ helm install traefik traefik/traefik \
   --set service.nodePorts.https=32443 \
   >> /var/log/k8s-bootstrap.log 2>&1
 
+# Wait for the Traefik pod to be ready
+echo "Waiting for Traefik pod to be ready..."
+kubectl wait --namespace traefik \
+  --for=condition=Ready pod \
+  --selector=app.kubernetes.io/name=traefik \
+  --timeout=90s
+
+  
+
 # Apply Ingress definition for Tripfinder
 kubectl apply -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-tripfinder/tripfinder-ingress.yaml
 
@@ -186,6 +211,7 @@ unzip -q awscliv2.zip
 ./aws/install -i /usr/local/aws-cli -b /usr/local/bin
 rm -rf aws awscliv2.zip
 
+sleep 3
 
 # Create ECR pull secret for Kubernetes
 kubectl create secret docker-registry ecr-secret \
@@ -198,4 +224,6 @@ sleep 3
 
 # get docker images from ECR
 kubectl apply -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-tripfinder/backend.yaml
+sleep 5
 kubectl apply -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-tripfinder/frontend.yaml
+sleep 5
