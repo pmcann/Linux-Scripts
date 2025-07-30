@@ -167,8 +167,7 @@ chmod 700 get_helm.sh
 rm -f get_helm.sh
 # Give Helm a moment to initialize
 sleep 3
-# Confirm install (log Helm version if successful)
-helm version >> /var/log/k8s-bootstrap.log 2>&1 || echo "[WARN] Helm version check failed" >> /var/log/k8s-bootstrap.log
+
 
 # Add Traefik Helm repo and prepare namespace
 echo "[BOOTSTRAP] Adding Traefik Helm repo..." | tee -a /var/log/k8s-bootstrap.log
@@ -190,15 +189,6 @@ helm install traefik traefik/traefik \
   --set service.nodePorts.http=32080 \
   --set service.nodePorts.https=32443 \
   >> /var/log/k8s-bootstrap.log 2>&1
-
-# Wait for the Traefik pod to be ready
-echo "Waiting for Traefik pod to be ready..."
-kubectl wait --namespace traefik \
-  --for=condition=Ready pod \
-  --selector=app.kubernetes.io/name=traefik \
-  --timeout=90s
-
-  
 
 # Apply Ingress definition for Tripfinder
 kubectl apply -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-tripfinder/tripfinder-ingress.yaml
