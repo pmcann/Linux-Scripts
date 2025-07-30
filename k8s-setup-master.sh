@@ -166,14 +166,18 @@ kubectl get namespace traefik >/dev/null 2>&1 || kubectl create namespace traefi
 
 # Install Traefik via Helm using NodePort
 echo "[BOOTSTRAP] Installing Traefik ingress controller..." | tee -a /var/log/k8s-bootstrap.log
+
 helm install traefik traefik/traefik \
   --namespace traefik \
   --set service.type=NodePort \
-  --set ingressClass.enabled=true \
-  --set ingressClass.isDefaultClass=true \
+  --set service.spec.externalTrafficPolicy=Cluster \
   --set service.nodePorts.http=32080 \
   --set service.nodePorts.https=32443 \
-  >> /var/log/k8s-bootstrap.log 2>&1
+  --set ports.web.nodePort=32080 \
+  --set ports.websecure.nodePort=32443 \
+  --set ingressClass.enabled=true \
+  --set ingressClass.isDefaultClass=true
+
 
 # Apply Ingress definition for Tripfinder
 kubectl apply -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-tripfinder/tripfinder-ingress.yaml
