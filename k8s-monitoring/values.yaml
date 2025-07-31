@@ -1,0 +1,14 @@
+grafana:
+  service:
+    type: NodePort
+    nodePort: 32001
+  adminPassword: "prom-operator"
+  defaultDashboardsEnabled: true
+
+prometheus:
+  service:
+    type: NodePort
+    nodePort: 32002
+  prometheusSpec:
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
