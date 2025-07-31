@@ -183,6 +183,32 @@ helm install traefik traefik/traefik \
 kubectl apply -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-tripfinder/tripfinder-ingress.yaml
 
 
+# ------------------------------------------------------------
+# Install kube-prometheus-stack via Helm with GitHub-hosted values.yaml
+# ------------------------------------------------------------
+
+echo "[BOOTSTRAP] Installing Prometheus + Grafana stack..." | tee -a /var/log/k8s-bootstrap.log
+
+# Create monitoring namespace if not exists
+kubectl get namespace monitoring >/dev/null 2>&1 || kubectl create namespace monitoring
+
+# Download values.yaml from GitHub
+curl -s -o /tmp/values.yaml https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-monitoring/values.yaml
+
+# Add Helm repo and update
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >> /var/log/k8s-bootstrap.log 2>&1
+helm repo update >> /var/log/k8s-bootstrap.log 2>&1
+
+# Install Prometheus stack
+helm upgrade --install prometheus-stack prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  -f /tmp/values.yaml >> /var/log/k8s-bootstrap.log 2>&1
+
+# Apply ServiceMonitors
+kubectl apply -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-monitoring/service-monitor-traefik.yaml -n monitoring
+kubectl apply -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-monitoring/service-monitor-backend.yaml -n monitoring
+
+
 # Install AWS CLI v2 (ARM64)
 cd /tmp
 curl -s "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip"
