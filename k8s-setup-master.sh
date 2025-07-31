@@ -2,6 +2,8 @@
 
 # Exit on any error
 set -e
+sleep 10
+exec > >(tee /var/log/k8s-bootstrap.log | logger -t bootstrap -s) 2>&1
 
 # Check for root privileges
 if [[ $EUID -ne 0 ]]; then
@@ -48,18 +50,6 @@ echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.
 
 apt-get update
 
-# DNS FIX: replace systemd stub resolver with VPC DNS and public fallback
-echo "Configuring resolv.conf with AWS VPC DNS and Google fallback..."
-systemctl disable systemd-resolved
-systemctl stop systemd-resolved
-rm -f /etc/resolv.conf
-cat <<EOF > /etc/resolv.conf
-nameserver 172.31.0.2
-nameserver 8.8.8.8
-EOF
-
-
-
 # Install containerd
 apt-get install -y containerd
 
@@ -72,10 +62,6 @@ systemctl restart containerd
 systemctl enable containerd
 
 # Install Kubernetes components
-# apt-get install -y kubelet kubeadm kubectl <installs old versions>
-
-# find latest versions 'apt-cache madison kubelet | head -n 10'
-# Install Kubernetes components using version found above
 VERSION=1.32.7-1.1
 apt-get update
 apt-get install -y kubelet=$VERSION kubeadm=$VERSION kubectl=$VERSION
@@ -93,18 +79,28 @@ systemctl enable kubelet.service
 kubeadm config images pull
 
 # Initialize the Kubernetes master node
+echo "[BOOTSTRAP] Running kubeadm init..."
 kubeadm init --pod-network-cidr=10.244.0.0/16
 
 # Set up kubeconfig for non-root user
 REAL_USER=${SUDO_USER:-ubuntu}
 USER_HOME=$(eval echo "~$REAL_USER")
 
-# Create .kube directory in the user's home
 mkdir -p "$USER_HOME/.kube"
 cp /etc/kubernetes/admin.conf "$USER_HOME/.kube/config"
 chown -R "$REAL_USER:$REAL_USER" "$USER_HOME/.kube"
 
 export KUBECONFIG="$USER_HOME/.kube/config"
+
+# DNS FIX: replace systemd stub resolver with VPC DNS and public fallback
+echo "Configuring resolv.conf with AWS VPC DNS and Google fallback..."
+systemctl disable systemd-resolved
+systemctl stop systemd-resolved
+rm -f /etc/resolv.conf
+cat <<EOF > /etc/resolv.conf
+nameserver 172.31.0.2
+nameserver 8.8.8.8
+EOF
 
 # Wait for kube-apiserver to become reachable
 until kubectl version >/dev/null 2>&1; do
@@ -112,10 +108,8 @@ until kubectl version >/dev/null 2>&1; do
     sleep 5
 done
 
-
 # Install Flannel network plugin
 kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
-
 
 # Wait for CoreDNS to be scheduled
 echo "Waiting for CoreDNS..."
@@ -141,8 +135,6 @@ if ! kubectl get svc nginx-nodeport > /dev/null 2>&1; then
   kubectl expose pod testpod --type=NodePort --port=80 --name=nginx-nodeport
 fi
 
-# Install unzip
-
 sleep 5
 apt-get install -y unzip
 sleep 10
@@ -154,14 +146,12 @@ curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scrip
 chmod 700 get_helm.sh
 ./get_helm.sh >> /var/log/k8s-bootstrap.log 2>&1
 rm -f get_helm.sh
-# Confirm install (log Helm version if successful)
 helm version >> /var/log/k8s-bootstrap.log 2>&1 || echo "[WARN] Helm version check failed" >> /var/log/k8s-bootstrap.log
 
 # Add Traefik Helm repo and prepare namespace
 echo "[BOOTSTRAP] Adding Traefik Helm repo..." | tee -a /var/log/k8s-bootstrap.log
 helm repo add traefik https://traefik.github.io/charts >> /var/log/k8s-bootstrap.log 2>&1
 helm repo update >> /var/log/k8s-bootstrap.log 2>&1
-# Create 'traefik' namespace if it doesn't exist
 kubectl get namespace traefik >/dev/null 2>&1 || kubectl create namespace traefik
 
 # Install Traefik via Helm using NodePort
@@ -178,36 +168,21 @@ helm install traefik traefik/traefik \
   --set ingressClass.enabled=true \
   --set ingressClass.isDefaultClass=true
 
-
 # Apply Ingress definition for Tripfinder
 kubectl apply -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-tripfinder/tripfinder-ingress.yaml
 
-
-# ------------------------------------------------------------
-# Install kube-prometheus-stack via Helm with GitHub-hosted values.yaml
-# ------------------------------------------------------------
+# Install kube-prometheus-stack
 
 echo "[BOOTSTRAP] Installing Prometheus + Grafana stack..." | tee -a /var/log/k8s-bootstrap.log
-
-# Create monitoring namespace if not exists
 kubectl get namespace monitoring >/dev/null 2>&1 || kubectl create namespace monitoring
-
-# Download values.yaml from GitHub
 curl -s -o /tmp/values.yaml https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-monitoring/values.yaml
-
-# Add Helm repo and update
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >> /var/log/k8s-bootstrap.log 2>&1
 helm repo update >> /var/log/k8s-bootstrap.log 2>&1
-
-# Install Prometheus stack
 helm upgrade --install prometheus-stack prometheus-community/kube-prometheus-stack \
   --namespace monitoring \
   -f /tmp/values.yaml >> /var/log/k8s-bootstrap.log 2>&1
-
-# Apply ServiceMonitors
 kubectl apply -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-monitoring/service-monitor-traefik.yaml -n monitoring
 kubectl apply -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-monitoring/service-monitor-backend.yaml -n monitoring
-
 
 # Install AWS CLI v2 (ARM64)
 cd /tmp
@@ -215,7 +190,6 @@ curl -s "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2
 unzip -q awscliv2.zip
 ./aws/install -i /usr/local/aws-cli -b /usr/local/bin
 rm -rf aws awscliv2.zip
-
 
 # Create ECR pull secret for Kubernetes
 kubectl create secret docker-registry ecr-secret \
@@ -225,7 +199,6 @@ kubectl create secret docker-registry ecr-secret \
   --docker-email=unused@example.com || echo "ECR secret already exists or failed to create"
 
 sleep 3
-
-# get docker images from ECR
 kubectl apply -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-tripfinder/backend.yaml
 kubectl apply -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-tripfinder/frontend.yaml
+
