@@ -157,6 +157,8 @@ kubectl get namespace traefik >/dev/null 2>&1 || kubectl create namespace traefi
 # Install Traefik via Helm using NodePort
 echo "[BOOTSTRAP] Installing Traefik ingress controller..." | tee -a /var/log/k8s-bootstrap.log
 
+
+
 helm install traefik traefik/traefik \
   --namespace traefik \
   --set service.type=NodePort \
@@ -167,6 +169,19 @@ helm install traefik traefik/traefik \
   --set ports.websecure.nodePort=32443 \
   --set ingressClass.enabled=true \
   --set ingressClass.isDefaultClass=true
+
+helm repo add jenkinsci https://charts.jenkins.io
+helm repo update
+
+helm upgrade --install jenkins jenkinsci/jenkins \
+  --namespace jenkins \
+  --create-namespace \
+  --set controller.serviceType=NodePort \
+  --set controller.servicePort=8080 \
+  --set controller.nodePortHTTP=32010 \
+  --set persistence.enabled=false
+
+
 
 # Apply Ingress definition for Tripfinder
 kubectl apply -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-tripfinder/tripfinder-ingress.yaml
