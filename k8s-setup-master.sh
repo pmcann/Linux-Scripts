@@ -3,6 +3,12 @@ set -e
 sleep 3
 exec > >(tee /var/log/k8s-bootstrap.log | logger -t bootstrap -s) 2>&1
 
+# Check for root privileges
+if [[ $EUID -ne 0 ]]; then
+    echo "Please run this script as root, e.g. sudo ./k8s-setup-master.sh"
+    exit 1
+fi
+
 # ── Clone or update our Git repo ───────────────────────────────────────────────
 REPO_URL="https://github.com/pmcann/Linux-Scripts.git"
 REPO_DIR="/root/Linux-Scripts"
@@ -17,13 +23,6 @@ fi
 
 # Make sure all later -f references work
 cd "$REPO_DIR"
-
-
-# Check for root privileges
-if [[ $EUID -ne 0 ]]; then
-    echo "Please run this script as root, e.g. sudo ./k8s-setup-master.sh"
-    exit 1
-fi
 
 # Disable swap (required for Kubernetes)
 swapoff -a
