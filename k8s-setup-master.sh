@@ -199,6 +199,27 @@ helm upgrade --install prometheus-stack prometheus-community/kube-prometheus-sta
 kubectl apply -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-monitoring/service-monitor-traefik.yaml -n monitoring
 kubectl apply -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-monitoring/service-monitor-backend.yaml -n monitoring
 
+
+echo "Adding Jenkins & Argo CD Helm repos..."
+helm repo add jenkinsci https://charts.jenkins.io
+helm repo add argo     https://argoproj.github.io/argo-helm
+helm repo add traefik  https://traefik.github.io/charts
+helm repo update
+
+echo "Installing Jenkins..."
+kubectl create namespace jenkins --dry-run=client -o yaml | kubectl apply -f -
+helm upgrade --install jenkins jenkinsci/jenkins \
+  --namespace jenkins \
+  -f k8s-helm/jenkins/values.yaml
+
+echo "Installing Argo CD..."
+kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+helm upgrade --install argo-cd argo/argo-cd \
+  --namespace argocd \
+  -f k8s-helm/argocd/values.yaml
+
+echo "Jenkins and Argo CD components installed successfully."
+
 # Install AWS CLI v2 (ARM64)
 cd /tmp
 curl -s "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip"
