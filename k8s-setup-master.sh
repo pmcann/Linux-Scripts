@@ -221,6 +221,43 @@ echo "Jenkins and Argo CD components installed successfully."
 
 
 # ── Remaining steps (AWS CLI, ECR secret, Tripfinder deploy) ───────────────────
-# … leave the rest unchanged …
-kubectl apply -f "$REPO_DIR/k8s-tripfinder/backend.yaml"
-kubectl apply -f "$REPO_DIR/k8s-tripfinder/frontend.yaml"
+
+# Install AWS CLI v2 (ARM64)
+
+
+cd /tmp
+
+curl -s "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip"
+
+unzip -q awscliv2.zip
+
+./aws/install -i /usr/local/aws-cli -b /usr/local/bin
+
+rm -rf aws awscliv2.zip
+
+
+
+# Create ECR pull secret for Kubernetes
+
+kubectl create secret docker-registry ecr-secret \
+
+  --docker-server=374965728115.dkr.ecr.us-east-1.amazonaws.com \
+
+  --docker-username=AWS \
+
+  --docker-password="$(aws ecr get-login-password --region us-east-1)" \
+
+  --docker-email=unused@example.com || echo "ECR secret already exists or failed to create"
+
+
+
+sleep 3
+
+kubectl apply -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-tripfinder/backend.yaml
+
+kubectl apply -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-tripfinder/frontend.yaml
+
+
+
+
+
