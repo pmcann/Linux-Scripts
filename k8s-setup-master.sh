@@ -5,6 +5,18 @@ set -e
 sleep 10
 exec > >(tee /var/log/k8s-bootstrap.log | logger -t bootstrap -s) 2>&1
 
+# clone or update your Git repo
+WORKDIR="/root/Linux-Scripts"
+if [ -d "$WORKDIR" ]; then
+  echo "[BOOTSTRAP] Updating existing Linux-Scripts repo…"
+  cd "$WORKDIR" && git pull
+else
+  echo "[BOOTSTRAP] Cloning Linux-Scripts repo…"
+  git clone https://github.com/pmcann/Linux-Scripts.git "$WORKDIR"
+  cd "$WORKDIR"
+fi
+
+
 # Check for root privileges
 if [[ $EUID -ne 0 ]]; then
     echo "Please run this script as root, e.g. sudo ./k8s-setup-master.sh"
