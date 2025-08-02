@@ -5,18 +5,6 @@ set -e
 sleep 10
 exec > >(tee /var/log/k8s-bootstrap.log | logger -t bootstrap -s) 2>&1
 
-# clone or update your Git repo
-WORKDIR="/root/Linux-Scripts"
-if [ -d "$WORKDIR" ]; then
-  echo "[BOOTSTRAP] Updating existing Linux-Scripts repo…"
-  cd "$WORKDIR" && git pull
-else
-  echo "[BOOTSTRAP] Cloning Linux-Scripts repo…"
-  git clone https://github.com/pmcann/Linux-Scripts.git "$WORKDIR"
-  cd "$WORKDIR"
-fi
-
-
 # Check for root privileges
 if [[ $EUID -ne 0 ]]; then
     echo "Please run this script as root, e.g. sudo ./k8s-setup-master.sh"
@@ -222,13 +210,13 @@ echo "Installing Jenkins..."
 kubectl create namespace jenkins --dry-run=client -o yaml | kubectl apply -f -
 helm upgrade --install jenkins jenkinsci/jenkins \
   --namespace jenkins \
-  -f k8s-helm/jenkins/values.yaml
+  -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-helm/jenkins/values.yaml
 
 echo "Installing Argo CD..."
 kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
 helm upgrade --install argo-cd argo/argo-cd \
   --namespace argocd \
-  -f k8s-helm/argocd/values.yaml
+  -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-helm/argocd/values.yaml
 
 echo "Jenkins and Argo CD components installed successfully."
 
