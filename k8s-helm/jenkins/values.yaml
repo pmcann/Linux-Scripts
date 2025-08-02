@@ -6,6 +6,6 @@ controller:
     hosts:
       - jenkins.your-domain.com
   persistence:
-    enabled: true
+    enabled: false
     size: 8Gi
 
