@@ -1,4 +1,4 @@
-master:
+controller:
   ingress:
     enabled: true
     annotations:
@@ -8,3 +8,4 @@ master:
   persistence:
     enabled: true
     size: 8Gi
+
