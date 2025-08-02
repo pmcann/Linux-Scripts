@@ -240,14 +240,14 @@ rm -rf aws awscliv2.zip
 # Create ECR pull secret for Kubernetes
 
 kubectl create secret docker-registry ecr-secret \
-
   --docker-server=374965728115.dkr.ecr.us-east-1.amazonaws.com \
-
   --docker-username=AWS \
-
   --docker-password="$(aws ecr get-login-password --region us-east-1)" \
-
   --docker-email=unused@example.com || echo "ECR secret already exists or failed to create"
+
+kubectl patch serviceaccount default \
+  -n default \
+  -p '{"imagePullSecrets":[{"name":"ecr-secret"}]}'
 
 
 
