@@ -253,9 +253,8 @@ kubectl create secret docker-registry ecr-secret \
 
 sleep 3
 
-kubectl apply -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-tripfinder/backend.yaml
-
-kubectl apply -f https://raw.githubusercontent.com/pmcann/Linux-Scripts/main/k8s-tripfinder/frontend.yaml
+kubectl apply -f "$REPO_DIR/k8s-tripfinder/backend.yaml"
+kubectl apply -f "$REPO_DIR/k8s-tripfinder/frontend.yaml"
 
 
 
