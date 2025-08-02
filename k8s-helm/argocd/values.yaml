@@ -1,0 +1,15 @@
+server:
+  service:
+    type: ClusterIP
+  ingress:
+    enabled: true
+    annotations:
+      kubernetes.io/ingress.class: traefik
+    hosts:
+      - argocd.your-domain.com
+controller:
+  metrics:
+    enabled: true
+repoServer:
+  metrics:
+    enabled: true
