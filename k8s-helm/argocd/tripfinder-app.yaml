@@ -6,9 +6,9 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/<YOUR_ORG>/<YOUR_REPO>.git
+    repoURL: https://github.com/pmcann/Linux-Scripts.git
     targetRevision: main
-    path: Linux-Scripts/k8s-tripfinder
+    path: k8s-tripfinder
   destination:
     server: https://kubernetes.default.svc
     namespace: default
