@@ -1,11 +1,54 @@
 controller:
+  # ──────────────────────────────────────
+  # Ingress & persistence
+  # ──────────────────────────────────────
   ingress:
     enabled: true
     annotations:
       kubernetes.io/ingress.class: traefik
     hosts:
       - jenkins.your-domain.com
+
   persistence:
     enabled: false
 
+  # ──────────────────────────────────────
+  # Environment variables (secrets)
+  # ──────────────────────────────────────
+  extraEnv:
+    - name: JENKINS_ADMIN_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: jenkins-admin-secret
+          key: password
+    - name: GITHUB_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: jenkins-github
+          key: pat
+    - name: ECR_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: jenkins-ecr
+          key: password
+
+  # ──────────────────────────────────────
+  # Plugins to install
+  # ──────────────────────────────────────
+  installPlugins:
+    - configuration-as-code
+    - kubernetes
+    - workflow-aggregator
+    - git
+    - docker-workflow
+
+  # ──────────────────────────────────────
+  # Hook in your JCasC file
+  # ──────────────────────────────────────
+  JCasC:
+    enabled: true
+    defaultConfig: false
+    configScripts:
+      jenkins: |
+        ${file("./jenkins-casc.yaml")}
 
