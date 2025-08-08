@@ -236,9 +236,7 @@ helm upgrade --install traefik traefik/traefik \
   --set ports.web.nodePort=32080 \
   --set ports.websecure.nodePort=32443 \
   --set ingressClass.enabled=true \
-  --set ingressClass.isDefaultClass=true \
-  --wait --timeout 10m
-
+  --set ingressClass.isDefaultClass=true 
 
 # ── Install Jenkins (no persistence; JCasC reads secrets we created above) ─────
 echo "[BOOTSTRAP] Installing Jenkins…"
@@ -248,8 +246,7 @@ helm upgrade --install jenkins jenkinsci/jenkins \
   --set controller.servicePort=8080 \
   --set controller.nodePortHTTP=32010 \
   --set persistence.enabled=false \
-  -f "$REPO_DIR/k8s-helm/jenkins/values.yaml" \
-  --wait --timeout 10m
+  -f "$REPO_DIR/k8s-helm/jenkins/values.yaml" 
 
 # ── Deploy Tripfinder workloads first ──────────────────────────────────────────
 kubectl apply -f "$REPO_DIR/k8s-tripfinder/backend.yaml"
@@ -263,8 +260,7 @@ echo "[BOOTSTRAP] Installing Prometheus + Grafana stack…"
 kubectl get namespace monitoring >/dev/null 2>&1 || kubectl create namespace monitoring
 helm upgrade --install prometheus-stack prometheus-community/kube-prometheus-stack \
   --namespace monitoring \
-  -f "$REPO_DIR/k8s-monitoring/values.yaml" \
-  --wait --timeout 10m
+  -f "$REPO_DIR/k8s-monitoring/values.yaml"
 
 
 kubectl apply -f "$REPO_DIR/k8s-monitoring/service-monitor-traefik.yaml" -n monitoring
@@ -274,8 +270,7 @@ kubectl apply -f "$REPO_DIR/k8s-monitoring/service-monitor-backend.yaml" -n moni
 echo "[BOOTSTRAP] Installing Argo CD…"
 helm upgrade --install argo-cd argo/argo-cd \
   --namespace argocd \
-  -f "$REPO_DIR/k8s-helm/argocd/values.yaml" \ 
-  --wait --timeout 10m
+  -f "$REPO_DIR/k8s-helm/argocd/values.yaml" 
 
 
 echo "[BOOTSTRAP] Jenkins, Argo CD, Traefik, and Monitoring installed."
