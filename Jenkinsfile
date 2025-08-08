@@ -5,7 +5,7 @@ pipeline {
     stage('Checkout') { steps { checkout scm } }
     stage('Smoke')    { steps { sh 'echo OK && git rev-parse --short HEAD' } }
 
-    // Build & push a tiny image to ECR using Kaniko
+    // Build & push a tiny image to ECR using Kaniko (no volumeMount DSL needed)
     stage('Kaniko smoke build') {
       steps {
         script {
@@ -13,9 +13,8 @@ pipeline {
             containers: [
               containerTemplate(
                 name: 'kaniko',
-                image: 'gcr.io/kaniko-project/executor:latest',
-                command: 'sleep', args: '99d', ttyEnabled: true,
-                volumeMounts: [ volumeMount(mountPath: '/kaniko/.docker', name: 'docker-config') ]
+                image: 'gcr.io/kaniko-project/executor:debug', // has busybox/sh
+                command: '/busybox/cat', ttyEnabled: true
               )
             ],
             volumes: [ secretVolume(secretName: 'ecr-dockercfg', mountPath: '/kaniko/.docker') ]
@@ -28,15 +27,19 @@ pipeline {
                   REPO="tripfinder-ci-smoke"
                   TAG="${BUILD_NUMBER}"
 
-                  # Minimal Dockerfile
+                  # Minimal image content
                   cat > Dockerfile <<'DF'
                   FROM alpine:3.20
                   CMD ["sh","-c","echo hello-from-kaniko"]
                   DF
 
-                  # Build & push
+                  # Make Kaniko see the docker config from the k8s secret
+                  mkdir -p /kaniko/.docker
+                  cp /kaniko/.docker/.dockerconfigjson /kaniko/.docker/config.json
+
+                  # Build & push to ECR
                   /kaniko/executor \
-                    --context $PWD \
+                    --context "$PWD" \
                     --dockerfile Dockerfile \
                     --destination ${ECR}/${REPO}:${TAG} \
                     --destination ${ECR}/${REPO}:latest
