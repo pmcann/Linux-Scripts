@@ -1,34 +1,6 @@
-persistence:
-  enabled: false
-
 controller:
-  ingress:
-    enabled: true
-    # modern style (optional but recommended)
-    ingressClassName: traefik
-    # If your chart version only supports annotations/hostName, keep your current block.
-    annotations:
-      kubernetes.io/ingress.class: traefik
-    hosts:
-      - jenkins.your-domain.com
-
-  # use 'containerEnv' if 'extraEnv' isn't recognized in your chart version
-  containerEnv:
-    - name: JENKINS_ADMIN_PASSWORD
-      valueFrom:
-        secretKeyRef:
-          name: jenkins-admin-secret
-          key: password
-    - name: GITHUB_TOKEN
-      valueFrom:
-        secretKeyRef:
-          name: jenkins-github
-          key: pat
-    - name: ECR_PASSWORD
-      valueFrom:
-        secretKeyRef:
-          name: jenkins-ecr
-          key: password
+  image:
+    tag: lts-jdk17
 
   installPlugins:
     - configuration-as-code
@@ -36,6 +8,16 @@ controller:
     - workflow-aggregator
     - git
     - docker-workflow
+    - credentials
+    - plain-credentials
+    - ssh-credentials
+    - git-client
+    - scm-api
+    - script-security
+    - structs
+    - token-macro
+    - jackson2-api
+    - snakeyaml-api
 
   JCasC:
     enabled: true
@@ -43,16 +25,16 @@ controller:
     configScripts:
       casc: |
         jenkins:
-          systemMessage: "⚙️ Managed via Configuration-as-Code"
-        securityRealm:
-          local:
-            allowsSignup: false
-            users:
-              - id: "admin"
-                password: "${JENKINS_ADMIN_PASSWORD}"
-        authorizationStrategy:
-          loggedInUsersCanDoAnything:
-            allowAnonymousRead: false
+          systemMessage: "Managed via Configuration-as-Code"
+          securityRealm:
+            local:
+              allowsSignup: false
+              users:
+                - id: "admin"
+                  password: "${JENKINS_ADMIN_PASSWORD}"
+          authorizationStrategy:
+            loggedInUsersCanDoAnything:
+              allowAnonymousRead: false
         credentials:
           system:
             domainCredentials:
