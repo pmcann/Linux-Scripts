@@ -249,11 +249,11 @@ helm upgrade --install jenkins jenkinsci/jenkins \
   -f "$REPO_DIR/k8s-helm/jenkins/values.yaml" 
 
 # ── Deploy Tripfinder workloads first ──────────────────────────────────────────
-kubectl apply -f "$REPO_DIR/k8s-tripfinder/backend.yaml"
-kubectl apply -f "$REPO_DIR/k8s-tripfinder/frontend.yaml"
+# kubectl apply -f "$REPO_DIR/k8s-tripfinder/backend.yaml"
+# kubectl apply -f "$REPO_DIR/k8s-tripfinder/frontend.yaml"
 
 # ── Then apply the Ingress (avoids 404s while pods start) ─────────────────────
-kubectl apply -f "$REPO_DIR/k8s-tripfinder/tripfinder-ingress.yaml"
+# kubectl apply -f "$REPO_DIR/k8s-tripfinder/tripfinder-ingress.yaml"
 
 # ── Install Prometheus + Grafana ───────────────────────────────────────────────
 echo "[BOOTSTRAP] Installing Prometheus + Grafana stack…"
