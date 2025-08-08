@@ -170,6 +170,60 @@ helm repo add argo      https://argoproj.github.io/argo-helm
 helm repo update
 
 
+# ── Install AWS CLI v2 (needed for ECR + SSM) ────────────────────────────────
+cd /tmp
+curl -s "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o awscliv2.zip
+unzip -q awscliv2.zip
+./aws/install -i /usr/local/aws-cli -b /usr/local/bin
+rm -rf aws awscliv2.zip
+
+# ── Namespaces (idempotent) ──────────────────────────────────────────────────
+kubectl create ns jenkins  --dry-run=client -o yaml | kubectl apply -f -
+kubectl create ns argocd   --dry-run=client -o yaml | kubectl apply -f -
+
+# ── Long-lived secrets come from SSM Parameter Store ─────────────────────────
+ACCOUNT_ID="374965728115"
+REGION="${AWS_REGION:-us-east-1}"
+ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
+
+JENKINS_ADMIN_PASSWORD="$(aws ssm get-parameter --with-decryption \
+  --name /tripfinder/jenkins/admin_password --query 'Parameter.Value' \
+  --output text 2>/dev/null || echo 'ChangeMe!')"
+
+GITHUB_PAT="$(aws ssm get-parameter --with-decryption \
+  --name /tripfinder/github/pat --query 'Parameter.Value' \
+  --output text 2>/dev/null || echo 'replace-me')"
+
+# ── Create Jenkins secrets (idempotent) ──────────────────────────────────────
+kubectl -n jenkins create secret generic jenkins-admin-secret \
+  --from-literal=password="$JENKINS_ADMIN_PASSWORD" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl -n jenkins create secret generic jenkins-github \
+  --from-literal=pat="$GITHUB_PAT" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# Short-lived ECR password (~12h) for bootstrap + image pulls
+ECR_PASS="$(aws ecr get-login-password --region "$REGION")"
+
+# For Jenkins JCasC credential (id: ecr-creds)
+kubectl -n jenkins create secret generic jenkins-ecr \
+  --from-literal=password="$ECR_PASS" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# For workloads pulling from ECR in the default namespace
+kubectl -n default create secret docker-registry ecr-secret \
+  --docker-server="$ECR_REGISTRY" \
+  --docker-username=AWS \
+  --docker-password="$ECR_PASS" \
+  --docker-email=unused@example.com \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# Make all new pods in default use that pull secret
+kubectl -n default patch serviceaccount default --type merge \
+  -p '{"imagePullSecrets":[{"name":"ecr-secret"}]}' || true
+
+
 # ── Install Traefik ────────────────────────────────────────────────────────────
 echo "[BOOTSTRAP] Installing Traefik ingress controller..."
 kubectl get namespace traefik >/dev/null 2>&1 || kubectl create namespace traefik
@@ -183,11 +237,11 @@ helm upgrade --install traefik traefik/traefik \
   --set ports.websecure.nodePort=32443 \
   --set ingressClass.enabled=true \
   --set ingressClass.isDefaultClass=true
+  --wait --timeout 10m
 
 
-# ── Install Jenkins (no persistence) ──────────────────────────────────────────
+# ── Install Jenkins (no persistence; JCasC reads secrets we created above) ─────
 echo "[BOOTSTRAP] Installing Jenkins…"
-kubectl get namespace jenkins >/dev/null 2>&1 || kubectl create namespace jenkins
 helm upgrade --install jenkins jenkinsci/jenkins \
   --namespace jenkins \
   --set controller.serviceType=NodePort \
@@ -195,11 +249,14 @@ helm upgrade --install jenkins jenkinsci/jenkins \
   --set controller.nodePortHTTP=32010 \
   --set persistence.enabled=false \
   -f "$REPO_DIR/k8s-helm/jenkins/values.yaml"
+  --wait --timeout 10m
 
+# ── Deploy Tripfinder workloads first ──────────────────────────────────────────
+kubectl apply -f "$REPO_DIR/k8s-tripfinder/backend.yaml"
+kubectl apply -f "$REPO_DIR/k8s-tripfinder/frontend.yaml"
 
-# ── Apply Tripfinder Ingress ───────────────────────────────────────────────────
+# ── Then apply the Ingress (avoids 404s while pods start) ─────────────────────
 kubectl apply -f "$REPO_DIR/k8s-tripfinder/tripfinder-ingress.yaml"
-
 
 # ── Install Prometheus + Grafana ───────────────────────────────────────────────
 echo "[BOOTSTRAP] Installing Prometheus + Grafana stack…"
@@ -207,56 +264,20 @@ kubectl get namespace monitoring >/dev/null 2>&1 || kubectl create namespace mon
 helm upgrade --install prometheus-stack prometheus-community/kube-prometheus-stack \
   --namespace monitoring \
   -f "$REPO_DIR/k8s-monitoring/values.yaml"
+  --wait --timeout 10m
+
+
 kubectl apply -f "$REPO_DIR/k8s-monitoring/service-monitor-traefik.yaml" -n monitoring
 kubectl apply -f "$REPO_DIR/k8s-monitoring/service-monitor-backend.yaml" -n monitoring
 
-
 # ── Install Argo CD ────────────────────────────────────────────────────────────
 echo "[BOOTSTRAP] Installing Argo CD…"
-kubectl get namespace argocd >/dev/null 2>&1 || kubectl create namespace argocd
 helm upgrade --install argo-cd argo/argo-cd \
   --namespace argocd \
   -f "$REPO_DIR/k8s-helm/argocd/values.yaml"
-echo "Jenkins and Argo CD components installed successfully."
+  --wait --timeout 10m
 
 
-# ── Remaining steps (AWS CLI, ECR secret, Tripfinder deploy) ───────────────────
-
-# Install AWS CLI v2 (ARM64)
-
-
-cd /tmp
-
-curl -s "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip"
-
-unzip -q awscliv2.zip
-
-./aws/install -i /usr/local/aws-cli -b /usr/local/bin
-
-rm -rf aws awscliv2.zip
-
-
-
-# Create ECR pull secret for Kubernetes
-
-kubectl create secret docker-registry ecr-secret \
-  --docker-server=374965728115.dkr.ecr.us-east-1.amazonaws.com \
-  --docker-username=AWS \
-  --docker-password="$(aws ecr get-login-password --region us-east-1)" \
-  --docker-email=unused@example.com || echo "ECR secret already exists or failed to create"
-
-kubectl patch serviceaccount default \
-  -n default \
-  -p '{"imagePullSecrets":[{"name":"ecr-secret"}]}'
-
-
-
-sleep 3
-
-kubectl apply -f "$REPO_DIR/k8s-tripfinder/backend.yaml"
-kubectl apply -f "$REPO_DIR/k8s-tripfinder/frontend.yaml"
-
-
-
+echo "[BOOTSTRAP] Jenkins, Argo CD, Traefik, and Monitoring installed."
 
 
