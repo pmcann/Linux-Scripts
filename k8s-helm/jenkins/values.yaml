@@ -1,21 +1,19 @@
+persistence:
+  enabled: false
+
 controller:
-  # ──────────────────────────────────────
-  # Ingress & persistence
-  # ──────────────────────────────────────
   ingress:
     enabled: true
+    # modern style (optional but recommended)
+    ingressClassName: traefik
+    # If your chart version only supports annotations/hostName, keep your current block.
     annotations:
       kubernetes.io/ingress.class: traefik
     hosts:
       - jenkins.your-domain.com
 
-  persistence:
-    enabled: false
-
-  # ──────────────────────────────────────
-  # Environment variables (secrets)
-  # ──────────────────────────────────────
-  extraEnv:
+  # use 'containerEnv' if 'extraEnv' isn't recognized in your chart version
+  containerEnv:
     - name: JENKINS_ADMIN_PASSWORD
       valueFrom:
         secretKeyRef:
@@ -32,9 +30,6 @@ controller:
           name: jenkins-ecr
           key: password
 
-  # ──────────────────────────────────────
-  # Plugins to install
-  # ──────────────────────────────────────
   installPlugins:
     - configuration-as-code
     - kubernetes
@@ -42,13 +37,36 @@ controller:
     - git
     - docker-workflow
 
-  # ──────────────────────────────────────
-  # Hook in your JCasC file
-  # ──────────────────────────────────────
   JCasC:
     enabled: true
     defaultConfig: false
     configScripts:
-      jenkins: |
-        ${file("./jenkins-casc.yaml")}
+      casc: |
+        jenkins:
+          systemMessage: "⚙️ Managed via Configuration-as-Code"
+        securityRealm:
+          local:
+            allowsSignup: false
+            users:
+              - id: "admin"
+                password: "${JENKINS_ADMIN_PASSWORD}"
+        authorizationStrategy:
+          loggedInUsersCanDoAnything:
+            allowAnonymousRead: false
+        credentials:
+          system:
+            domainCredentials:
+              - credentials:
+                  - string:
+                      id: "github-token"
+                      secret: "${GITHUB_TOKEN}"
+                      description: "GitHub Personal Access Token"
+                  - usernamePassword:
+                      id: "ecr-creds"
+                      username: "AWS"
+                      password: "${ECR_PASSWORD}"
+                      description: "ECR login token"
+        unclassified:
+          location:
+            url: "https://jenkins.your-domain.com"
 
