@@ -1,0 +1,22 @@
+controller:
+  
+  admin:
+  existingSecret: jenkins-admin-secret
+  userKey: jenkins-admin-user
+  passwordKey: jenkins-admin-password      
+  installPlugins:
+    - kubernetes
+    - configuration-as-code
+  javaOpts: "-Djenkins.install.runSetupWizard=false"    
+  JCasC:
+    configScripts:
+      kubernetesCloud: |
+        jenkins:
+          clouds:
+            - kubernetes:
+                name: "kubernetes"
+                serverUrl: "https://kubernetes.default.svc"
+                namespace: "jenkins"
+                jenkinsUrl: "http://jenkins.jenkins.svc.cluster.local:8080"
+                jenkinsTunnel: "jenkins-agent.jenkins.svc.cluster.local:50000"
+                webSocket: true
