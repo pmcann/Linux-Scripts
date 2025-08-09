@@ -9,7 +9,7 @@ controller:
   javaOpts: "-Djenkins.install.runSetupWizard=false"
   JCasC:
     configScripts:
-      kubernetesCloud: |
+      kubernetescloud: |
         jenkins:
           clouds:
             - kubernetes:

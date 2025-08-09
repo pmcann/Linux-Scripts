@@ -263,8 +263,7 @@ helm upgrade --install jenkins jenkinsci/jenkins \
   -f "$REPO_DIR/k8s-helm/jenkins/values.yaml" \
   -f "$REPO_DIR/k8s-helm/jenkins/values-kubecloud.yaml"
 
-kubectl -n jenkins rollout status statefulset/jenkins --timeout=5m
-
+kubectl -n jenkins rollout status statefulset/jenkins 
 
 # --- RBAC: allow Jenkins to run agent Pods in 'jenkins' ns ---
 cat <<'EOF' | kubectl apply -f -
