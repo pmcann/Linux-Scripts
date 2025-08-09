@@ -196,7 +196,8 @@ GITHUB_PAT="$(aws ssm get-parameter --with-decryption \
 
 # ── Create Jenkins secrets (idempotent) ──────────────────────────────────────
 kubectl -n jenkins create secret generic jenkins-admin-secret \
-  --from-literal=password="$JENKINS_ADMIN_PASSWORD" \
+  --from-literal=jenkins-admin-user=admin \
+  --from-literal=jenkins-admin-password="$JENKINS_ADMIN_PASSWORD" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 kubectl -n jenkins create secret generic jenkins-github \
@@ -205,6 +206,20 @@ kubectl -n jenkins create secret generic jenkins-github \
 
 # Short-lived ECR password (~12h) for bootstrap + image pulls
 ECR_PASS="$(aws ecr get-login-password --region "$REGION")"
+
+
+
+# Kaniko push auth (dockerconfig) in jenkins ns
+kubectl -n jenkins create secret docker-registry ecr-dockercfg \
+  --docker-server="${ECR_REGISTRY}" \
+  --docker-username=AWS \
+  --docker-password="${ECR_PASS}" \
+  --docker-email=unused@example.com \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+
+
+
 
 # For Jenkins JCasC credential (id: ecr-creds)
 kubectl -n jenkins create secret generic jenkins-ecr \
@@ -238,15 +253,36 @@ helm upgrade --install traefik traefik/traefik \
   --set ingressClass.enabled=true \
   --set ingressClass.isDefaultClass=true 
 
-# ── Install Jenkins (no persistence; JCasC reads secrets we created above) ─────
 echo "[BOOTSTRAP] Installing Jenkins…"
 helm upgrade --install jenkins jenkinsci/jenkins \
   --namespace jenkins \
   --set controller.serviceType=NodePort \
   --set controller.servicePort=8080 \
-  --set controller.nodePortHTTP=32010 \
+  --set controller.nodePort=32010 \
   --set persistence.enabled=false \
-  -f "$REPO_DIR/k8s-helm/jenkins/values.yaml" 
+  -f "$REPO_DIR/k8s-helm/jenkins/values.yaml" \
+  -f "$REPO_DIR/k8s-helm/jenkins/values-kubecloud.yaml"
+
+kubectl -n jenkins rollout status statefulset/jenkins --timeout=5m
+
+
+# --- RBAC: allow Jenkins to run agent Pods in 'jenkins' ns ---
+cat <<'EOF' | kubectl apply -f -
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-agents
+  namespace: jenkins
+subjects:
+- kind: ServiceAccount
+  name: jenkins
+  namespace: jenkins
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: edit
+EOF
+
 
 # ── Deploy Tripfinder workloads first ──────────────────────────────────────────
 # kubectl apply -f "$REPO_DIR/k8s-tripfinder/backend.yaml"
