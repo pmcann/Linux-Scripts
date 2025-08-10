@@ -1,4 +1,20 @@
 controller:
+  containerEnv:
+    - name: JENKINS_ADMIN_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: jenkins-admin-secret
+          key: jenkins-admin-password
+    - name: GITHUB_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: jenkins-github
+          key: pat
+    - name: ECR_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: jenkins-ecr
+          key: password
   admin:
     existingSecret: jenkins-admin-secret
     userKey: jenkins-admin-user
