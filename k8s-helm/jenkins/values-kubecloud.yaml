@@ -22,18 +22,19 @@ controller:
   installPlugins:
     - kubernetes
     - configuration-as-code
-    - workflow-aggregator        # Pipeline (all core pipeline bits)
-    - git                        # Git client for jobs
-    - git-client                 # Git plumbing
-    - pipeline-utility-steps     # handy steps (readYaml, writeYaml, etc.)
-    - pipeline-stage-view        # pretty pipeline UI
-    - credentials-binding        # bind creds as env vars in pipelines
-    - github                     # GitHub integration (webhooks, status)
-    - github-branch-source       # multibranch / org jobs from GitHub
-    - ansicolor                  # colorized console logs (nice to read)
-    - timestamper                # enables options { timestamps() }
-    - matrix-auth                # fine-grained RBAC if you want later
-    - kubernetes-credentials-provider  # <-- exposes K8s Secrets as Jenkins credentials
+    - workflow-aggregator
+    - git
+    - git-client
+    - pipeline-utility-steps
+    - pipeline-stage-view
+    - credentials-binding
+    - github
+    - github-branch-source
+    - ansicolor
+    - timestamper
+    - matrix-auth
+    - kubernetes-credentials-provider
+    - job-dsl                 # <-- REQUIRED for JCasC 'jobs:' block
   javaOpts: "-Djenkins.install.runSetupWizard=false"
   JCasC:
     configScripts:
