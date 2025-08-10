@@ -1,5 +1,5 @@
 # Tripfinder Backend Deployment
-# Version: v1.0.2
+# Managed by Argo CD; image tag is auto-bumped by Jenkins
 
 apiVersion: apps/v1
 kind: Deployment
@@ -25,6 +25,7 @@ spec:
       containers:
         - name: tripfinder-backend
           image: 374965728115.dkr.ecr.us-east-1.amazonaws.com/tripfinder-backend:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
           env:
@@ -34,18 +35,19 @@ spec:
               value: "-Dsun.net.inetaddr.ttl=30 -Dsun.net.spi.nameservice.provider.1=dns,sun"
       imagePullSecrets:
         - name: ecr-secret
-
 ---
-
 apiVersion: v1
 kind: Service
 metadata:
   name: tripfinder-backend-service
+  labels:
+    app: tripfinder-backend
 spec:
   selector:
     app: tripfinder-backend
   type: ClusterIP
   ports:
-    - port: 8080
+    - name: http
+      port: 8080
       targetPort: 8080
 

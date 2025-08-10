@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jenkins
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ngrok
+  namespace: jenkins
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ngrok
+  template:
+    metadata:
+      labels:
+        app: ngrok
+    spec:
+      containers:
+        - name: ngrok
+          image: ngrok/ngrok:alpine
+          args:
+            - http
+            - "--domain=$(NGROK_DOMAIN)"
+            - "http://jenkins.jenkins.svc.cluster.local:8080"
+          env:
+            - name: NGROK_AUTHTOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ngrok-secret
+                  key: NGROK_AUTHTOKEN
+            - name: NGROK_DOMAIN
+              valueFrom:
+                secretKeyRef:
+                  name: ngrok-secret
+                  key: NGROK_DOMAIN
+          readinessProbe:
+            httpGet:
+              path: /api/tunnels
+              port: 4040
+            initialDelaySeconds: 5
+            periodSeconds: 10
+

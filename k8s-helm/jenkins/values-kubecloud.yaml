@@ -31,8 +31,9 @@ controller:
     - github                     # GitHub integration (webhooks, status)
     - github-branch-source       # multibranch / org jobs from GitHub
     - ansicolor                  # colorized console logs (nice to read)
-    - timestamper              # enables options { timestamps() }
-    - matrix-auth              # fine-grained RBAC if you want later  
+    - timestamper                # enables options { timestamps() }
+    - matrix-auth                # fine-grained RBAC if you want later
+    - kubernetes-credentials-provider  # <-- exposes K8s Secrets as Jenkins credentials
   javaOpts: "-Djenkins.install.runSetupWizard=false"
   JCasC:
     configScripts:

@@ -1,5 +1,5 @@
 jenkins:
-  systemMessage: "⚙️ Managed via Configuration-as-Code"
+  systemMessage: "Managed via Configuration-as-Code"
 
 securityRealm:
   local:
@@ -25,8 +25,67 @@ credentials:
               username: "AWS"
               password: "${ECR_PASSWORD}"
               description: "ECR login token"
+          - string:
+              id: "github-webhook-secret"
+              secret: "${GITHUB_WEBHOOK_SECRET}"
+              description: "GitHub webhook shared secret"
 
 unclassified:
   location:
-    url: "https://jenkins.your-domain.com"
+    url: "https://rationally-above-sheep.ngrok-free.app"
+  jobDsl:
+    scriptSecurity: false
+  githubPluginConfig:
+    hookSecretConfig:
+      credentialsId: "github-webhook-secret"
+
+jobs:
+  - script: |
+      multibranchPipelineJob('tripfinder-backend') {
+        displayName('tripfinder-backend')
+        branchSources {
+          branchSource {
+            source {
+              github {
+                id('tripfinder-backend-src')
+                repoOwner('pmcann')
+                repository('tripfinder-backend')
+                credentialsId('github-token')
+                configuredByUrl(false)
+                traits {
+                  gitHubBranchDiscovery { strategyId(1) }        // branches
+                  gitHubPullRequestDiscovery { strategyId(1) }    // PRs
+                }
+              }
+            }
+          }
+        }
+        factory { workflowBranchProjectFactory { scriptPath('Jenkinsfile') } }
+        orphanedItemStrategy { discardOldItems { numToKeep(10) } }
+        triggers { periodicFolderTrigger { interval('1d') } }    // keep daily as a safety net
+      }
+
+      multibranchPipelineJob('tripfinder-frontend') {
+        displayName('tripfinder-frontend')
+        branchSources {
+          branchSource {
+            source {
+              github {
+                id('tripfinder-frontend-src')
+                repoOwner('pmcann')
+                repository('tripfinder-frontend')
+                credentialsId('github-token')
+                configuredByUrl(false)
+                traits {
+                  gitHubBranchDiscovery { strategyId(1) }
+                  gitHubPullRequestDiscovery { strategyId(1) }
+                }
+              }
+            }
+          }
+        }
+        factory { workflowBranchProjectFactory { scriptPath('Jenkinsfile') } }
+        orphanedItemStrategy { discardOldItems { numToKeep(10) } }
+        triggers { periodicFolderTrigger { interval('1d') } }
+      }
 

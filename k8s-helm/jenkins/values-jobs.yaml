@@ -1,0 +1,67 @@
+controller:
+  # Full plugin list (overrides, not appends)
+  installPlugins:
+    - kubernetes
+    - configuration-as-code
+    - workflow-aggregator         # Pipeline
+    - git
+    - git-client
+    - pipeline-utility-steps
+    - pipeline-stage-view
+    - credentials-binding
+    - github
+    - github-branch-source
+    - job-dsl                     # lets us define jobs via DSL
+    - ansicolor
+
+  JCasC:
+    configScripts:
+      # Create a string credential from your env-mapped secret
+      credentials: |
+        credentials:
+          system:
+            domainCredentials:
+              - credentials:
+                  - string:
+                      scope: GLOBAL
+                      id: "github-pat"
+                      secret: "${GITHUB_TOKEN}"
+                      description: "GitHub PAT for Git + API"
+
+      # Define a Multibranch Pipeline job for your backend repo
+      backend-mbp: |
+        jobs:
+          - script: >
+              multibranchPipelineJob('tripfinder-backend') {
+                branchSources {
+                  branchSource {
+                    source {
+                      github {
+                        id('tf-backend')
+                        repoOwner('pmcann')
+                        repository('tripfinder-backend')
+                        credentialsId('github-pat')
+                        configuredByUrl(false)
+                        traits {
+                          gitHubBranchDiscovery { strategyId(1) }       // branches
+                          gitHubPullRequestDiscovery { strategyId(1) }  // PRs
+                        }
+                      }
+                    }
+                    strategy {
+                      defaultOrphanedItemStrategy {
+                        pruneDeadBranches(true)
+                        daysToKeepStr('7')
+                        numToKeepStr('10')
+                      }
+                    }
+                  }
+                }
+                factory {
+                  workflowBranchProjectFactory {
+                    scriptPath('Jenkinsfile')
+                  }
+                }
+                // If webhooks aren’t reachable, this keeps things moving
+                triggers { periodicFolderTrigger { interval('1m') } }
+              }

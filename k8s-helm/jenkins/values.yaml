@@ -2,6 +2,7 @@ controller:
   image:
     tag: lts-jdk17
 
+  # Note: values-kubecloud.yaml overrides this list; keeping it here is harmless.
   installPlugins:
     - configuration-as-code
     - kubernetes
@@ -18,6 +19,7 @@ controller:
     - token-macro
     - jackson2-api
     - snakeyaml-api
+    - kubernetes-credentials-provider
 
   JCasC:
     enabled: true
@@ -35,20 +37,62 @@ controller:
           authorizationStrategy:
             loggedInUsersCanDoAnything:
               allowAnonymousRead: false
-        credentials:
-          system:
-            domainCredentials:
-              - credentials:
-                  - string:
-                      id: "github-token"
-                      secret: "${GITHUB_TOKEN}"
-                      description: "GitHub Personal Access Token"
-                  - usernamePassword:
-                      id: "ecr-creds"
-                      username: "AWS"
-                      password: "${ECR_PASSWORD}"
-                      description: "ECR login token"
+      github: |
         unclassified:
           location:
-            url: "https://jenkins.your-domain.com"
+            url: "https://rationally-above-sheep.ngrok-free.app"
+          jobDsl:
+            scriptSecurity: false
+          githubPluginConfig:
+            hookSecretConfig:
+              credentialsId: "github-webhook-secret"
+      jobs: |
+        jobs:
+          - script: |
+              multibranchPipelineJob('tripfinder-backend') {
+                displayName('tripfinder-backend')
+                branchSources {
+                  branchSource {
+                    source {
+                      github {
+                        id('tripfinder-backend-src')
+                        repoOwner('pmcann')
+                        repository('tripfinder-backend')
+                        credentialsId('github-token')
+                        configuredByUrl(false)
+                        traits {
+                          gitHubBranchDiscovery { strategyId(1) }
+                          gitHubPullRequestDiscovery { strategyId(1) }
+                        }
+                      }
+                    }
+                  }
+                }
+                factory { workflowBranchProjectFactory { scriptPath('Jenkinsfile') } }
+                orphanedItemStrategy { discardOldItems { numToKeep(10) } }
+                triggers { periodicFolderTrigger { interval('1d') } }
+              }
+
+              multibranchPipelineJob('tripfinder-frontend') {
+                displayName('tripfinder-frontend')
+                branchSources {
+                  branchSource {
+                    source {
+                      github {
+                        id('tripfinder-frontend-src')
+                        repoOwner('pmcann')
+                        repository('tripfinder-frontend')
+                        credentialsId('github-token')
+                        configuredByUrl(false)
+                        traits {
+                          gitHubBranchDiscovery { strategyId(1) }
+                          gitHubPullRequestDiscovery { strategyId(1) }
+                        }
+                      }
+                    }
+                  }
+                }
+                factory { workflowBranchProjectFactory { scriptPath('Jenkinsfile') } }
+                orphanedItemStrategy { discardOldItems { numToKeep(10) } }
+                triggers { periodicFolderTrigger { interval('1d') } }
 
