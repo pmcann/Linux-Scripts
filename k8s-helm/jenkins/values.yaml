@@ -112,7 +112,6 @@ controller:
                 factory { workflowBranchProjectFactory { scriptPath('Jenkinsfile') } }
               }
   
-  
 
       casc: |
         jenkins:
