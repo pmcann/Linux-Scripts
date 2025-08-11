@@ -9,15 +9,18 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
+# Ensure hostname resolves locally (avoids "unable to resolve host" from sudo)
+grep -q "$(hostname)" /etc/hosts || echo "127.0.1.1 $(hostname)" >> /etc/hosts
+
 # ── Clone or update our Git repo ───────────────────────────────────────────────
 REPO_URL="https://github.com/pmcann/Linux-Scripts.git"
 REPO_DIR="/root/Linux-Scripts"
 
 if [ -d "$REPO_DIR" ]; then
-  echo "[BOOTSTRAP] Updating Linux-Scripts…"
+  echo "[BOOTSTRAP] Updating Linux-Scripts..."
   git -C "$REPO_DIR" pull
 else
-  echo "[BOOTSTRAP] Cloning Linux-Scripts…"
+  echo "[BOOTSTRAP] Cloning Linux-Scripts..."
   git clone "$REPO_URL" "$REPO_DIR"
 fi
 
@@ -56,10 +59,10 @@ apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release un
 # Add Kubernetes apt repository
 mkdir -p /etc/apt/keyrings
 curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.32/deb/Release.key \
-    | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+  | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
 echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.32/deb/ /" \
-    > /etc/apt/sources.list.d/kubernetes.list
+  > /etc/apt/sources.list.d/kubernetes.list
 
 apt-get update
 
@@ -107,8 +110,8 @@ export KUBECONFIG="$USER_HOME/.kube/config"
 
 # DNS FIX: replace systemd stub resolver with VPC DNS and public fallback
 echo "Configuring resolv.conf with AWS VPC DNS and Google fallback..."
-systemctl disable systemd-resolved
-systemctl stop systemd-resolved
+systemctl disable systemd-resolved || true
+systemctl stop systemd-resolved || true
 rm -f /etc/resolv.conf
 cat <<EOF > /etc/resolv.conf
 nameserver 172.31.0.2
@@ -117,8 +120,8 @@ EOF
 
 # Wait for kube-apiserver to become reachable
 until kubectl version >/dev/null 2>&1; do
-    echo "Waiting for API server..."
-    sleep 5
+  echo "Waiting for API server..."
+  sleep 5
 done
 
 # Install Flannel network plugin
@@ -127,8 +130,8 @@ kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documen
 # Wait for CoreDNS to be scheduled
 echo "Waiting for CoreDNS..."
 until kubectl get pods -n kube-system | grep coredns | grep -q Running; do
-    kubectl get pods -n kube-system
-    sleep 5
+  kubectl get pods -n kube-system
+  sleep 5
 done
 
 # Deploy a test nginx pod
@@ -140,11 +143,9 @@ while ! kubectl get pod testpod 2>/dev/null | grep -q Running; do
   sleep 5
 done
 
-# Delete old service if it exists
+# Delete old service if it exists and create NodePort service for testpod
 kubectl delete svc testpod-service --ignore-not-found
-
-# Create NodePort service if it doesn't exist
-if ! kubectl get svc nginx-nodeport > /dev/null 2>&1; then
+if ! kubectl get svc nginx-nodeport >/dev/null 2>&1; then
   kubectl expose pod testpod --type=NodePort --port=80 --name=nginx-nodeport
 fi
 
@@ -159,10 +160,10 @@ helm version >> /var/log/k8s-bootstrap.log 2>&1 || echo "[WARN] Helm version che
 
 # ── Add all Helm repos ─────────────────────────────────────────────────────────
 echo "[BOOTSTRAP] Adding Helm chart repositories..."
-helm repo add traefik   https://traefik.github.io/charts
+helm repo add traefik https://traefik.github.io/charts
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo add jenkinsci https://charts.jenkins.io
-helm repo add argo      https://argoproj.github.io/argo-helm
+helm repo add argo https://argoproj.github.io/argo-helm
 helm repo update
 
 # ── Install AWS CLI v2 (needed for ECR + SSM) ─────────────────────────────────
@@ -172,19 +173,18 @@ unzip -q awscliv2.zip
 ./aws/install -i /usr/local/aws-cli -b /usr/local/bin
 rm -rf aws awscliv2.zip
 
-
 # ── Namespaces (idempotent) ───────────────────────────────────────────────────
-kubectl create ns jenkins  --dry-run=client -o yaml | kubectl apply -f -
-kubectl create ns argocd   --dry-run=client -o yaml | kubectl apply -f -
+kubectl create ns jenkins --dry-run=client -o yaml | kubectl apply -f -
+kubectl create ns argocd  --dry-run=client -o yaml | kubectl apply -f -
 
-sleep 10
+sleep 5
 
-# ── Create/Update GitHub webhook credential in Jenkins (from SSM) ─────────────
+# ── GitHub webhook secret (Jenkins Credentials Provider) from SSM ─────────────
 echo "[BOOTSTRAP] Creating/updating GitHub webhook credential in Jenkins..." | tee -a /var/log/k8s-bootstrap.log
 SSM_PATH="/tripfinder/github/webhookSecret"
 JENKINS_NS="jenkins"
 set +e
-GH_SECRET_VALUE=$(aws ssm get-parameter --with-decryption --name "$SSM_PATH" --query 'Parameter.Value' --output text 2>/dev/null)
+GH_SECRET_VALUE=$(aws ssm get-parameter --with-decryption --name "$SSM_PATH" --query 'Parameter.Value' --output text 2>/dev/null | tr -d '\n')
 if [ -z "$GH_SECRET_VALUE" ] || [ "$GH_SECRET_VALUE" = "None" ]; then
   echo "[WARN] SSM parameter $SSM_PATH not found or empty; skipping webhook secret creation." | tee -a /var/log/k8s-bootstrap.log
 else
@@ -200,10 +200,10 @@ else
 fi
 set -e
 
-
-# ── Long-lived secrets come from SSM Parameter Store ──────────────────────────
+# ── Long-lived secrets from SSM + ECR auth ────────────────────────────────────
 ACCOUNT_ID="374965728115"
-REGION="${AWS_REGION:-us-east-1}"
+AWS_REGION="${AWS_REGION:-us-east-1}"
+REGION="$AWS_REGION"
 ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
 
 JENKINS_ADMIN_PASSWORD="$(aws ssm get-parameter --with-decryption \
@@ -214,18 +214,19 @@ GITHUB_PAT="$(aws ssm get-parameter --with-decryption \
   --name /tripfinder/github/pat --query 'Parameter.Value' \
   --output text 2>/dev/null || echo 'replace-me')"
 
-# ── Create Jenkins secrets (idempotent) ───────────────────────────────────────
+# Short-lived ECR password (~12h) for bootstrap + image pulls
+ECR_PASS="$(aws ecr get-login-password --region "$REGION")"
+
+# ── Secrets used by pods or JCasC (idempotent) ────────────────────────────────
 kubectl -n jenkins create secret generic jenkins-admin-secret \
   --from-literal=jenkins-admin-user=admin \
   --from-literal=jenkins-admin-password="$JENKINS_ADMIN_PASSWORD" \
   --dry-run=client -o yaml | kubectl apply -f -
 
+# Optional legacy secret (not used by current JCasC path, safe to keep)
 kubectl -n jenkins create secret generic jenkins-github \
   --from-literal=pat="$GITHUB_PAT" \
   --dry-run=client -o yaml | kubectl apply -f -
-
-# Short-lived ECR password (~12h) for bootstrap + image pulls
-ECR_PASS="$(aws ecr get-login-password --region "$REGION")"
 
 # Kaniko push auth (dockerconfig) in jenkins ns
 kubectl -n jenkins create secret docker-registry ecr-dockercfg \
@@ -235,7 +236,7 @@ kubectl -n jenkins create secret docker-registry ecr-dockercfg \
   --docker-email=unused@example.com \
   --dry-run=client -o yaml | kubectl apply -f -
 
-# For Jenkins JCasC credential (id: ecr-creds)
+# For Jenkins JCasC credential (id: ecr-creds) if you keep it ENV-based
 kubectl -n jenkins create secret generic jenkins-ecr \
   --from-literal=password="$ECR_PASS" \
   --dry-run=client -o yaml | kubectl apply -f -
@@ -251,6 +252,20 @@ kubectl -n default create secret docker-registry ecr-secret \
 # Make all new pods in default use that pull secret
 kubectl -n default patch serviceaccount default --type merge \
   -p '{"imagePullSecrets":[{"name":"ecr-secret"}]}' || true
+
+# ── Ensure jenkins-env Secret for containerEnv (GITHUB_TOKEN, ADMIN, optional ECR_PASSWORD) ──
+echo "[BOOTSTRAP] Ensuring jenkins-env Secret..." | tee -a /var/log/k8s-bootstrap.log
+args=()
+[ -n "$GITHUB_PAT" ]            && args+=( --from-literal=GITHUB_TOKEN="$GITHUB_PAT" )
+[ -n "$JENKINS_ADMIN_PASSWORD" ]&& args+=( --from-literal=JENKINS_ADMIN_PASSWORD="$JENKINS_ADMIN_PASSWORD" )
+[ -n "$ECR_PASS" ]              && args+=( --from-literal=ECR_PASSWORD="$ECR_PASS" )
+if [ ${#args[@]} -eq 0 ]; then
+  echo "[WARN] No values for jenkins-env; private GitHub indexing may fail." | tee -a /var/log/k8s-bootstrap.log
+else
+  kubectl -n jenkins create secret generic jenkins-env "${args[@]}" \
+    --dry-run=client -o yaml | kubectl apply -f - >> /var/log/k8s-bootstrap.log 2>&1
+  echo "[BOOTSTRAP] jenkins-env ensured." | tee -a /var/log/k8s-bootstrap.log
+fi
 
 # ── Install Traefik ───────────────────────────────────────────────────────────
 echo "[BOOTSTRAP] Installing Traefik ingress controller..."
@@ -293,7 +308,8 @@ roleRef:
   name: jenkins-credentials-read
 EOF
 
-echo "[BOOTSTRAP] Installing Jenkins…" | tee -a /var/log/k8s-bootstrap.log
+# ── Install Jenkins with retry ────────────────────────────────────────────────
+echo "[BOOTSTRAP] Installing Jenkins..." | tee -a /var/log/k8s-bootstrap.log
 kubectl create ns jenkins --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
 HELM_ARGS=(
@@ -320,7 +336,7 @@ for i in $(seq 1 $max); do
 
   if [ "$i" -lt "$max" ]; then
     sleep_sec=$((i * 15))
-    echo "[WARN] Jenkins Helm install failed (attempt $i/$max). Retrying in ${sleep_sec}s…" | tee -a /var/log/k8s-bootstrap.log
+    echo "[WARN] Jenkins Helm install failed (attempt $i/$max). Retrying in ${sleep_sec}s..." | tee -a /var/log/k8s-bootstrap.log
     sleep "$sleep_sec"
   else
     echo "[ERROR] Jenkins Helm install failed after $max attempts." | tee -a /var/log/k8s-bootstrap.log
@@ -330,14 +346,14 @@ done
 
 kubectl -n jenkins rollout status statefulset/jenkins
 
-# place this AFTER Jenkins rollout in k8s-setup-master.sh
+# ── ngrok tunnel for Jenkins (from SSM) ───────────────────────────────────────
 NGROK_AUTHTOKEN="$(aws ssm get-parameter --with-decryption \
   --name /tripfinder/ngrok/authtoken --query 'Parameter.Value' --output text 2>/dev/null || true)"
 NGROK_DOMAIN="$(aws ssm get-parameter \
   --name /tripfinder/ngrok/domain --query 'Parameter.Value' --output text 2>/dev/null || true)"
 
 if [ -n "$NGROK_AUTHTOKEN" ] && [ -n "$NGROK_DOMAIN" ] && [ -f "$REPO_DIR/k8s-tripfinder/ngrok-jenkins.yaml" ]; then
-  echo "[BOOTSTRAP] Creating ngrok Secret and applying tunnel…"
+  echo "[BOOTSTRAP] Creating ngrok Secret and applying tunnel..."
   kubectl -n jenkins create secret generic ngrok-secret \
     --from-literal=NGROK_AUTHTOKEN="$NGROK_AUTHTOKEN" \
     --from-literal=NGROK_DOMAIN="$NGROK_DOMAIN" \
@@ -364,15 +380,13 @@ roleRef:
   name: edit
 EOF
 
-# ── Deploy Tripfinder workloads first ─────────────────────────────────────────
+# ── Deploy Tripfinder workloads (optional, keep commented if Argo handles it) ─
 # kubectl apply -f "$REPO_DIR/k8s-tripfinder/backend.yaml"
 # kubectl apply -f "$REPO_DIR/k8s-tripfinder/frontend.yaml"
-
-# ── Then apply the Ingress (avoids 404s while pods start) ─────────────────────
 # kubectl apply -f "$REPO_DIR/k8s-tripfinder/tripfinder-ingress.yaml"
 
 # ── Install Prometheus + Grafana ──────────────────────────────────────────────
-echo "[BOOTSTRAP] Installing Prometheus + Grafana stack…"
+echo "[BOOTSTRAP] Installing Prometheus + Grafana stack..."
 kubectl get namespace monitoring >/dev/null 2>&1 || kubectl create namespace monitoring
 helm upgrade --install prometheus-stack prometheus-community/kube-prometheus-stack \
   --namespace monitoring \
@@ -382,7 +396,7 @@ kubectl apply -f "$REPO_DIR/k8s-monitoring/service-monitor-traefik.yaml" -n moni
 kubectl apply -f "$REPO_DIR/k8s-monitoring/service-monitor-backend.yaml" -n monitoring
 
 # ── Install Argo CD ───────────────────────────────────────────────────────────
-echo "[BOOTSTRAP] Installing Argo CD…"
+echo "[BOOTSTRAP] Installing Argo CD..."
 helm upgrade --install argo-cd argo/argo-cd \
   --namespace argocd \
   -f "$REPO_DIR/k8s-helm/argocd/values.yaml"
@@ -390,7 +404,7 @@ helm upgrade --install argo-cd argo/argo-cd \
 # --- Bootstrap Argo CD Application (Tripfinder) ---
 APP_FILE="$REPO_DIR/k8s-helm/argocd/tripfinder-app.yaml"
 
-echo "[BOOTSTRAP] Waiting for Argo CD CRD…"
+echo "[BOOTSTRAP] Waiting for Argo CD CRD..."
 until kubectl get crd applications.argoproj.io >/dev/null 2>&1; do
   sleep 5
 done
