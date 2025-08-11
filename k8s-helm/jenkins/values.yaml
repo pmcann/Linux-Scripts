@@ -40,9 +40,6 @@ controller:
     failureThreshold: 12
 
 
-
-
-
   installPlugins:
     - configuration-as-code
     - kubernetes
@@ -80,7 +77,7 @@ controller:
                   branchSource {
                     source {
                       github {
-                        id("gh-backend-${owner}-${backend}")
+                        id('gh-backend-' + owner + '-' + backend)
                         repoOwner(owner)
                         repository(backend)
                         credentialsId('github-token')
@@ -102,7 +99,7 @@ controller:
                   branchSource {
                     source {
                       github {
-                        id("gh-frontend-${owner}-${frontend}")
+                        id('gh-frontend-' + owner + '-' + frontend)
                         repoOwner(owner)
                         repository(frontend)
                         credentialsId('github-token')
@@ -117,7 +114,8 @@ controller:
                 factory { workflowBranchProjectFactory { scriptPath('Jenkinsfile') } }
                 orphanedItemStrategy { discardOldItems { numToKeep(20) } }
                 triggers { periodicFolderTrigger { interval('1m') } }
-              }
+
+  
 
       casc: |
         jenkins:
