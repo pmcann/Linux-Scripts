@@ -2,11 +2,6 @@ controller:
   image:
     tag: lts-jdk17
 
-  # Use chart-managed admin creds (no env var needed)
-  adminUser: admin
-  adminPassword: ChangeMe!
-
-  # Plugins (yours + required for multibranch/GitHub/DSL)
   installPlugins:
     - configuration-as-code
     - kubernetes
@@ -28,85 +23,35 @@ controller:
     - github
     - github-branch-source
 
-  # Optional convenience values used below
-  env:
-    - name: GITHUB_OWNER
-      value: pmcann
-    - name: BACKEND_REPO
-      value: tripfinder-backend
-    - name: FRONTEND_REPO
-      value: tripfinder-frontend
-    - name: JENKINS_LOCATION_URL
-      value: https://rationally-above-sheep.ngrok-free.app
-
   JCasC:
     enabled: true
     defaultConfig: false
     configScripts:
-      base: |
+      casc: |
         jenkins:
-          systemMessage: "Managed via Configuration-as-Code (ephemeral)"
+          systemMessage: "Managed via Configuration-as-Code"
           securityRealm:
             local:
               allowsSignup: false
               users:
                 - id: "admin"
-                  password: "${JENKINS_ADMIN_PASSWORD:-ChangeMe!}"
+                  password: "${JENKINS_ADMIN_PASSWORD}"
           authorizationStrategy:
             loggedInUsersCanDoAnything:
               allowAnonymousRead: false
+        credentials:
+          system:
+            domainCredentials:
+              - credentials:
+                  - string:
+                      id: "github-token"
+                      secret: "${GITHUB_TOKEN}"
+                      description: "GitHub Personal Access Token"
+                  - usernamePassword:
+                      id: "ecr-creds"
+                      username: "AWS"
+                      password: "${ECR_PASSWORD}"
+                      description: "ECR login token"
         unclassified:
           location:
-            url: "${JENKINS_LOCATION_URL:-http://jenkins.jenkins.svc.cluster.local:8080}"
-
-      # NOTE: No credentials block; jobs below do NOT reference a GitHub credential.
-      # If your repos are private, we'll add a PAT later via SSM -> Secret -> env.
-
-      jobs-multibranch: |
-        jobs:
-          - script: >
-              def owner    = System.getenv('GITHUB_OWNER')   ?: 'pmcann';
-              def backend  = System.getenv('BACKEND_REPO')   ?: 'tripfinder-backend';
-              def frontend = System.getenv('FRONTEND_REPO')  ?: 'tripfinder-frontend';
-
-              multibranchPipelineJob("tripfinder-backend") {
-                branchSources {
-                  branchSource {
-                    source {
-                      github {
-                        id("gh-backend-${owner}-${backend}")
-                        repoOwner(owner)
-                        repository(backend)
-                        traits {
-                          gitHubBranchDiscovery { strategyId(1) }       // branches
-                          gitHubPullRequestDiscovery { strategyId(1) }  // PRs
-                        }
-                      }
-                    }
-                  }
-                }
-                factory { workflowBranchProjectFactory { scriptPath('Jenkinsfile') } }
-                orphanedItemStrategy { discardOldItems { numToKeep(20) } }
-                triggers { periodicFolderTrigger { interval('1m') } }
-              }
-
-              multibranchPipelineJob("tripfinder-frontend") {
-                branchSources {
-                  branchSource {
-                    source {
-                      github {
-                        id("gh-frontend-${owner}-${frontend}")
-                        repoOwner(owner)
-                        repository(frontend)
-                        traits {
-                          gitHubBranchDiscovery { strategyId(1) }
-                          gitHubPullRequestDiscovery { strategyId(1) }
-                        }
-                      }
-                    }
-                  }
-                }
-                factory { workflowBranchProjectFactory { scriptPath('Jenkinsfile') } }
-                orphanedItemStrategy { discardOldItems { numToKeep(20) } }
-                triggers { periodicFolderTrigger { interval('1m') } }
-
+            url: "http://jenkins.jenkins.svc.cluster.local:8080"  
