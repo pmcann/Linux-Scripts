@@ -1,12 +1,31 @@
 controller:
   image:
     tag: lts-jdk17
+
+  # Env for JCasC placeholders
   containerEnv:
     - name: GITHUB_TOKEN
       valueFrom:
         secretKeyRef:
           name: jenkins-env
           key: GITHUB_TOKEN
+    - name: JENKINS_ADMIN_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: jenkins-env
+          key: JENKINS_ADMIN_PASSWORD
+    # Optional: only if you keep the ecr-creds block in JCasC
+    - name: ECR_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: jenkins-env
+          key: ECR_PASSWORD
+
+  # Keep things stable in ephemeral mode
+  sidecars:
+    configAutoReload:
+      enabled: false
+
   installPlugins:
     - configuration-as-code
     - kubernetes
@@ -47,7 +66,7 @@ controller:
                         id("gh-backend-${owner}-${backend}")
                         repoOwner(owner)
                         repository(backend)
-                        credentialsId("github-token")          // <<< use your PAT
+                        credentialsId("github-token")          // uses PAT from ${GITHUB_TOKEN}
                         traits {
                           gitHubBranchDiscovery { strategyId(1) }
                           gitHubPullRequestDiscovery { strategyId(1) }
@@ -69,7 +88,7 @@ controller:
                         id("gh-frontend-${owner}-${frontend}")
                         repoOwner(owner)
                         repository(frontend)
-                        credentialsId("github-token")          // <<< use your PAT
+                        credentialsId("github-token")
                         traits {
                           gitHubBranchDiscovery { strategyId(1) }
                           gitHubPullRequestDiscovery { strategyId(1) }
@@ -108,4 +127,5 @@ controller:
                       description: "ECR login token"
         unclassified:
           location:
-            url: "http://jenkins.jenkins.svc.cluster.local:8080"  
+            url: "http://jenkins.jenkins.svc.cluster.local:8080"
+
