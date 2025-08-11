@@ -172,9 +172,34 @@ unzip -q awscliv2.zip
 ./aws/install -i /usr/local/aws-cli -b /usr/local/bin
 rm -rf aws awscliv2.zip
 
+
 # ── Namespaces (idempotent) ───────────────────────────────────────────────────
 kubectl create ns jenkins  --dry-run=client -o yaml | kubectl apply -f -
 kubectl create ns argocd   --dry-run=client -o yaml | kubectl apply -f -
+
+sleep 10
+
+# ── Create/Update GitHub webhook credential in Jenkins (from SSM) ─────────────
+echo "[BOOTSTRAP] Creating/updating GitHub webhook credential in Jenkins..." | tee -a /var/log/k8s-bootstrap.log
+SSM_PATH="/tripfinder/github/webhookSecret"
+JENKINS_NS="jenkins"
+set +e
+GH_SECRET_VALUE=$(aws ssm get-parameter --with-decryption --name "$SSM_PATH" --query 'Parameter.Value' --output text 2>/dev/null)
+if [ -z "$GH_SECRET_VALUE" ] || [ "$GH_SECRET_VALUE" = "None" ]; then
+  echo "[WARN] SSM parameter $SSM_PATH not found or empty; skipping webhook secret creation." | tee -a /var/log/k8s-bootstrap.log
+else
+  kubectl -n "$JENKINS_NS" create secret generic github-webhook-secret \
+    --from-literal=text="$GH_SECRET_VALUE" \
+    --dry-run=client -o yaml \
+  | kubectl label --local -f - jenkins.io/credentials-type=secretText --overwrite -o yaml \
+  | kubectl annotate --local -f - \
+      jenkins.io/credentials-id=github-webhook-secret \
+      jenkins.io/credentials-description="GitHub Webhook Secret" \
+      --overwrite -o yaml \
+  | kubectl apply -f - >> /var/log/k8s-bootstrap.log 2>&1
+fi
+set -e
+
 
 # ── Long-lived secrets come from SSM Parameter Store ──────────────────────────
 ACCOUNT_ID="374965728115"

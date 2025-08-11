@@ -15,6 +15,12 @@ controller:
         secretKeyRef:
           name: jenkins-ecr
           key: password
+    - name: JENKINS_UC
+      value: "https://updates.jenkins.io"
+    - name: JENKINS_UC_DOWNLOAD
+      value: "https://updates.jenkins.io/download"
+    - name: JENKINS_INCREMENTALS_REPO_MIRROR
+      value: "https://repo.jenkins-ci.org/incrementals"
   admin:
     existingSecret: jenkins-admin-secret
     userKey: jenkins-admin-user
