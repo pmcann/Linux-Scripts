@@ -51,7 +51,7 @@ apt update
 apt-get update
 
 # Install dependencies
-apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
+apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release unzip
 
 # Add Kubernetes apt repository
 mkdir -p /etc/apt/keyrings
@@ -148,10 +148,6 @@ if ! kubectl get svc nginx-nodeport > /dev/null 2>&1; then
   kubectl expose pod testpod --type=NodePort --port=80 --name=nginx-nodeport
 fi
 
-sleep 5
-apt-get install -y unzip
-sleep 10
-
 # ── Install Helm ───────────────────────────────────────────────────────────────
 echo "[BOOTSTRAP] Installing Helm..."
 cd /tmp
@@ -169,19 +165,18 @@ helm repo add jenkinsci https://charts.jenkins.io
 helm repo add argo      https://argoproj.github.io/argo-helm
 helm repo update
 
-
-# ── Install AWS CLI v2 (needed for ECR + SSM) ────────────────────────────────
+# ── Install AWS CLI v2 (needed for ECR + SSM) ─────────────────────────────────
 cd /tmp
 curl -s "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o awscliv2.zip
 unzip -q awscliv2.zip
 ./aws/install -i /usr/local/aws-cli -b /usr/local/bin
 rm -rf aws awscliv2.zip
 
-# ── Namespaces (idempotent) ──────────────────────────────────────────────────
+# ── Namespaces (idempotent) ───────────────────────────────────────────────────
 kubectl create ns jenkins  --dry-run=client -o yaml | kubectl apply -f -
 kubectl create ns argocd   --dry-run=client -o yaml | kubectl apply -f -
 
-# ── Long-lived secrets come from SSM Parameter Store ─────────────────────────
+# ── Long-lived secrets come from SSM Parameter Store ──────────────────────────
 ACCOUNT_ID="374965728115"
 REGION="${AWS_REGION:-us-east-1}"
 ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
@@ -194,7 +189,7 @@ GITHUB_PAT="$(aws ssm get-parameter --with-decryption \
   --name /tripfinder/github/pat --query 'Parameter.Value' \
   --output text 2>/dev/null || echo 'replace-me')"
 
-# ── Create Jenkins secrets (idempotent) ──────────────────────────────────────
+# ── Create Jenkins secrets (idempotent) ───────────────────────────────────────
 kubectl -n jenkins create secret generic jenkins-admin-secret \
   --from-literal=jenkins-admin-user=admin \
   --from-literal=jenkins-admin-password="$JENKINS_ADMIN_PASSWORD" \
@@ -207,8 +202,6 @@ kubectl -n jenkins create secret generic jenkins-github \
 # Short-lived ECR password (~12h) for bootstrap + image pulls
 ECR_PASS="$(aws ecr get-login-password --region "$REGION")"
 
-
-
 # Kaniko push auth (dockerconfig) in jenkins ns
 kubectl -n jenkins create secret docker-registry ecr-dockercfg \
   --docker-server="${ECR_REGISTRY}" \
@@ -216,10 +209,6 @@ kubectl -n jenkins create secret docker-registry ecr-dockercfg \
   --docker-password="${ECR_PASS}" \
   --docker-email=unused@example.com \
   --dry-run=client -o yaml | kubectl apply -f -
-
-
-
-
 
 # For Jenkins JCasC credential (id: ecr-creds)
 kubectl -n jenkins create secret generic jenkins-ecr \
@@ -238,8 +227,7 @@ kubectl -n default create secret docker-registry ecr-secret \
 kubectl -n default patch serviceaccount default --type merge \
   -p '{"imagePullSecrets":[{"name":"ecr-secret"}]}' || true
 
-
-# ── Install Traefik ────────────────────────────────────────────────────────────
+# ── Install Traefik ───────────────────────────────────────────────────────────
 echo "[BOOTSTRAP] Installing Traefik ingress controller..."
 kubectl get namespace traefik >/dev/null 2>&1 || kubectl create namespace traefik
 helm upgrade --install traefik traefik/traefik \
@@ -251,7 +239,34 @@ helm upgrade --install traefik traefik/traefik \
   --set ports.web.nodePort=32080 \
   --set ports.websecure.nodePort=32443 \
   --set ingressClass.enabled=true \
-  --set ingressClass.isDefaultClass=true 
+  --set ingressClass.isDefaultClass=true
+
+# ── RBAC: allow Jenkins to read Secrets for creds provider (before Jenkins starts) ──
+cat <<'EOF' | kubectl apply -f -
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jenkins-credentials-read
+  namespace: jenkins
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get","list","watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-credentials-read
+  namespace: jenkins
+subjects:
+- kind: ServiceAccount
+  name: jenkins
+  namespace: jenkins
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: jenkins-credentials-read
+EOF
 
 echo "[BOOTSTRAP] Installing Jenkins…"
 helm upgrade --install jenkins jenkinsci/jenkins \
@@ -263,7 +278,7 @@ helm upgrade --install jenkins jenkinsci/jenkins \
   -f "$REPO_DIR/k8s-helm/jenkins/values.yaml" \
   -f "$REPO_DIR/k8s-helm/jenkins/values-kubecloud.yaml"
 
-kubectl -n jenkins rollout status statefulset/jenkins 
+kubectl -n jenkins rollout status statefulset/jenkins
 
 # --- RBAC: allow Jenkins to run agent Pods in 'jenkins' ns ---
 cat <<'EOF' | kubectl apply -f -
@@ -282,31 +297,28 @@ roleRef:
   name: edit
 EOF
 
-
-# ── Deploy Tripfinder workloads first ──────────────────────────────────────────
+# ── Deploy Tripfinder workloads first ─────────────────────────────────────────
 # kubectl apply -f "$REPO_DIR/k8s-tripfinder/backend.yaml"
 # kubectl apply -f "$REPO_DIR/k8s-tripfinder/frontend.yaml"
 
 # ── Then apply the Ingress (avoids 404s while pods start) ─────────────────────
 # kubectl apply -f "$REPO_DIR/k8s-tripfinder/tripfinder-ingress.yaml"
 
-# ── Install Prometheus + Grafana ───────────────────────────────────────────────
+# ── Install Prometheus + Grafana ──────────────────────────────────────────────
 echo "[BOOTSTRAP] Installing Prometheus + Grafana stack…"
 kubectl get namespace monitoring >/dev/null 2>&1 || kubectl create namespace monitoring
 helm upgrade --install prometheus-stack prometheus-community/kube-prometheus-stack \
   --namespace monitoring \
   -f "$REPO_DIR/k8s-monitoring/values.yaml"
 
-
 kubectl apply -f "$REPO_DIR/k8s-monitoring/service-monitor-traefik.yaml" -n monitoring
 kubectl apply -f "$REPO_DIR/k8s-monitoring/service-monitor-backend.yaml" -n monitoring
 
-# ── Install Argo CD ────────────────────────────────────────────────────────────
+# ── Install Argo CD ───────────────────────────────────────────────────────────
 echo "[BOOTSTRAP] Installing Argo CD…"
 helm upgrade --install argo-cd argo/argo-cd \
   --namespace argocd \
-  -f "$REPO_DIR/k8s-helm/argocd/values.yaml" 
-
+  -f "$REPO_DIR/k8s-helm/argocd/values.yaml"
 
 # --- Bootstrap Argo CD Application (Tripfinder) ---
 APP_FILE="$REPO_DIR/k8s-helm/argocd/tripfinder-app.yaml"
@@ -316,7 +328,6 @@ until kubectl get crd applications.argoproj.io >/dev/null 2>&1; do
   sleep 5
 done
 
-# Controller ready => sync will happen immediately (don’t fail the whole script if it’s slow)
 kubectl -n argocd rollout status deployment/argocd-application-controller --timeout=300s || true
 
 if [ -f "$APP_FILE" ]; then
@@ -326,7 +337,5 @@ else
   echo "[BOOTSTRAP][WARN] $APP_FILE not found; skipping Argo Application bootstrap."
 fi
 
-
 echo "[BOOTSTRAP] Jenkins, Argo CD, Traefik, and Monitoring installed."
-
 
