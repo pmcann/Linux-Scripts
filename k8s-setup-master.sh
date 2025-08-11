@@ -235,12 +235,6 @@ kubectl -n default create secret docker-registry ecr-secret \
 kubectl -n default patch serviceaccount default --type merge \
   -p '{"imagePullSecrets":[{"name":"ecr-secret"}]}' || true
 
-# [NEW] Create ngrok Secret for the in-cluster ngrok Deployment
-kubectl -n jenkins create secret generic ngrok-secret \
-  --from-literal=NGROK_AUTHTOKEN="$NGROK_AUTHTOKEN" \
-  --from-literal=NGROK_DOMAIN="$NGROK_DOMAIN" \
-  --dry-run=client -o yaml | kubectl apply -f -
-
 # [NEW] Create GitHub webhook credential Secret (surfaced to Jenkins via Kubernetes Credentials Provider)
 cat <<'YAML' | kubectl apply -n jenkins -f -
 apiVersion: v1
@@ -258,9 +252,6 @@ YAML
 
 kubectl -n jenkins patch secret github-webhook-secret --type json \
   -p "[{\"op\":\"replace\",\"path\":\"/stringData\",\"value\":{\"text\":\"$WEBHOOK_SECRET\"}}]"
-
-# [NEW] Apply ngrok Deployment (for stable external URL to Jenkins)
-kubectl apply -f "$REPO_DIR/k8s-tripfinder/ngrok-jenkins.yaml"
 
 # ── Install Traefik ───────────────────────────────────────────────────────────
 echo "[BOOTSTRAP] Installing Traefik ingress controller..."
@@ -287,7 +278,18 @@ helm upgrade --install jenkins jenkinsci/jenkins \
   -f "$REPO_DIR/k8s-helm/jenkins/values.yaml" \
   -f "$REPO_DIR/k8s-helm/jenkins/values-kubecloud.yaml"
 
-kubectl -n jenkins rollout status statefulset/jenkins 
+kubectl -n jenkins rollout status statefulset/jenkins
+
+
+# [NEW] Create ngrok Secret for the in-cluster ngrok Deployment
+kubectl -n jenkins create secret generic ngrok-secret \
+  --from-literal=NGROK_AUTHTOKEN="$NGROK_AUTHTOKEN" \
+  --from-literal=NGROK_DOMAIN="$NGROK_DOMAIN" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# [NEW] Apply ngrok Deployment (for stable external URL to Jenkins)
+kubectl apply -f "$REPO_DIR/k8s-tripfinder/ngrok-jenkins.yaml"
+
 
 # --- RBAC: allow Jenkins to run agent Pods in 'jenkins' ns ---
 cat <<'EOF' | kubectl apply -f -
