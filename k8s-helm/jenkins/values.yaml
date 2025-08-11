@@ -1,7 +1,12 @@
 controller:
   image:
     tag: lts-jdk17
-
+  containerEnv:
+    - name: GITHUB_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: jenkins-env
+          key: GITHUB_TOKEN
   installPlugins:
     - configuration-as-code
     - kubernetes
