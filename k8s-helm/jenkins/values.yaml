@@ -27,6 +27,55 @@ controller:
     enabled: true
     defaultConfig: false
     configScripts:
+      jobs: |
+        jobs:
+          - script: >
+              def owner    = 'pmcann';
+              def backend  = 'tripfinder-backend';
+              def frontend = 'tripfinder-frontend';
+
+              multibranchPipelineJob("tripfinder-backend") {
+                branchSources {
+                  branchSource {
+                    source {
+                      github {
+                        id("gh-backend-${owner}-${backend}")
+                        repoOwner(owner)
+                        repository(backend)
+                        credentialsId("github-token")          // <<< use your PAT
+                        traits {
+                          gitHubBranchDiscovery { strategyId(1) }
+                          gitHubPullRequestDiscovery { strategyId(1) }
+                        }
+                      }
+                    }
+                  }
+                }
+                factory { workflowBranchProjectFactory { scriptPath('Jenkinsfile') } }
+                orphanedItemStrategy { discardOldItems { numToKeep(20) } }
+                triggers { periodicFolderTrigger { interval('1m') } }
+              }
+
+              multibranchPipelineJob("tripfinder-frontend") {
+                branchSources {
+                  branchSource {
+                    source {
+                      github {
+                        id("gh-frontend-${owner}-${frontend}")
+                        repoOwner(owner)
+                        repository(frontend)
+                        credentialsId("github-token")          // <<< use your PAT
+                        traits {
+                          gitHubBranchDiscovery { strategyId(1) }
+                          gitHubPullRequestDiscovery { strategyId(1) }
+                        }
+                      }
+                    }
+                  }
+                }
+                factory { workflowBranchProjectFactory { scriptPath('Jenkinsfile') } }
+                orphanedItemStrategy { discardOldItems { numToKeep(20) } }
+                triggers { periodicFolderTrigger { interval('1m') } }
       casc: |
         jenkins:
           systemMessage: "Managed via Configuration-as-Code"
