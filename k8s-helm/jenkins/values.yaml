@@ -2,6 +2,7 @@ controller:
   image:
     tag: lts-jdk17
 
+  # Plugins you already had + additions for Job DSL + GitHub Multibranch
   installPlugins:
     - configuration-as-code
     - kubernetes
@@ -19,6 +20,21 @@ controller:
     - jackson2-api
     - snakeyaml-api
     - kubernetes-credentials-provider
+    - job-dsl
+    - github
+    - github-branch-source
+
+  # Small env block so the DSL can be generic
+  env:
+    - name: GITHUB_OWNER
+      value: pmcann
+    - name: BACKEND_REPO
+      value: tripfinder-backend
+    - name: FRONTEND_REPO
+      value: tripfinder-frontend
+    # Optional: keep Jenkins Location in one place (used below)
+    - name: JENKINS_LOCATION_URL
+      value: https://rationally-above-sheep.ngrok-free.app
 
   JCasC:
     enabled: true
@@ -51,5 +67,58 @@ controller:
                       description: "ECR login token"
         unclassified:
           location:
-            url: "http://jenkins.jenkins.svc.cluster.local:8080"
+            url: "${JENKINS_LOCATION_URL:-http://jenkins.jenkins.svc.cluster.local:8080}"
+
+      jobs-multibranch: |
+        jobs:
+          - script: >
+              import jenkins.model.Jenkins
+
+              def owner    = System.getenv('GITHUB_OWNER')    ?: 'pmcann';
+              def backend  = System.getenv('BACKEND_REPO')    ?: 'tripfinder-backend';
+              def frontend = System.getenv('FRONTEND_REPO')   ?: 'tripfinder-frontend';
+
+              multibranchPipelineJob("tripfinder-backend") {
+                branchSources {
+                  branchSource {
+                    source {
+                      github {
+                        id("gh-backend-${owner}-${backend}")
+                        repoOwner(owner)
+                        repository(backend)
+                        credentialsId("github-token")          // uses your JCasC credential
+                        traits {
+                          gitHubBranchDiscovery { strategyId(1) }       // build branches
+                          gitHubPullRequestDiscovery { strategyId(1) }  // build PRs
+                        }
+                      }
+                    }
+                  }
+                }
+                factory { workflowBranchProjectFactory { scriptPath('Jenkinsfile') } }
+                orphanedItemStrategy { discardOldItems { numToKeep(20) } }
+                triggers { periodicFolderTrigger { interval('1m') } }   // re-index every minute
+              }
+
+              multibranchPipelineJob("tripfinder-frontend") {
+                branchSources {
+                  branchSource {
+                    source {
+                      github {
+                        id("gh-frontend-${owner}-${frontend}")
+                        repoOwner(owner)
+                        repository(frontend)
+                        credentialsId("github-token")
+                        traits {
+                          gitHubBranchDiscovery { strategyId(1) }
+                          gitHubPullRequestDiscovery { strategyId(1) }
+                        }
+                      }
+                    }
+                  }
+                }
+                factory { workflowBranchProjectFactory { scriptPath('Jenkinsfile') } }
+                orphanedItemStrategy { discardOldItems { numToKeep(20) } }
+                triggers { periodicFolderTrigger { interval('1m') } }
+              }
 
