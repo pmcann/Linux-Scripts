@@ -303,6 +303,34 @@ helm upgrade --install jenkins jenkinsci/jenkins \
   -f "$REPO_DIR/k8s-helm/jenkins/values.yaml" \
   -f "$REPO_DIR/k8s-helm/jenkins/values-kubecloud.yaml"
 
+echo "[BOOTSTRAP] Installing Jenkins…" | tee -a /var/log/k8s-bootstrap.log
+kubectl create ns jenkins --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+
+# Retry Jenkins chart install to ride out GitHub 503s / rate limits
+max=6
+for i in $(seq 1 $max); do
+  helm repo add jenkinsci https://charts.jenkins.io >/dev/null 2>&1 || true
+  helm repo update >/dev/null 2>&1 || true
+
+  if helm upgrade --install jenkins jenkinsci/jenkins -n jenkins \
+      -f /root/Linux-Scripts/k8s-helm/jenkins/values.yaml \
+      --wait --timeout 10m >> /var/log/k8s-bootstrap.log 2>&1; then
+    echo "[BOOTSTRAP] Jenkins chart installed." | tee -a /var/log/k8s-bootstrap.log
+    break
+  fi
+
+  if [ "$i" -lt "$max" ]; then
+    sleep_sec=$((i * 15))
+    echo "[WARN] Jenkins Helm install failed (attempt $i/$max). Retrying in ${sleep_sec}s…" | tee -a /var/log/k8s-bootstrap.log
+    sleep "$sleep_sec"
+  else
+    echo "[ERROR] Jenkins Helm install failed after $max attempts." | tee -a /var/log/k8s-bootstrap.log
+    exit 1
+  fi
+done
+
+
+
 kubectl -n jenkins rollout status statefulset/jenkins
 
 # place this AFTER Jenkins rollout in k8s-setup-master.sh
