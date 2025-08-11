@@ -293,28 +293,27 @@ roleRef:
   name: jenkins-credentials-read
 EOF
 
-echo "[BOOTSTRAP] Installing Jenkins…"
-helm upgrade --install jenkins jenkinsci/jenkins \
-  --namespace jenkins \
-  --set controller.serviceType=NodePort \
-  --set controller.servicePort=8080 \
-  --set controller.nodePort=32010 \
-  --set persistence.enabled=false \
-  -f "$REPO_DIR/k8s-helm/jenkins/values.yaml" \
-  -f "$REPO_DIR/k8s-helm/jenkins/values-kubecloud.yaml"
-
 echo "[BOOTSTRAP] Installing Jenkins…" | tee -a /var/log/k8s-bootstrap.log
 kubectl create ns jenkins --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
-# Retry Jenkins chart install to ride out GitHub 503s / rate limits
+HELM_ARGS=(
+  upgrade --install jenkins jenkinsci/jenkins
+  -n jenkins
+  -f "$REPO_DIR/k8s-helm/jenkins/values.yaml"
+  -f "$REPO_DIR/k8s-helm/jenkins/values-kubecloud.yaml"
+  --set controller.serviceType=NodePort
+  --set controller.servicePort=8080
+  --set controller.nodePort=32010
+  --set persistence.enabled=false
+  --wait --timeout 10m
+)
+
 max=6
 for i in $(seq 1 $max); do
   helm repo add jenkinsci https://charts.jenkins.io >/dev/null 2>&1 || true
   helm repo update >/dev/null 2>&1 || true
 
-  if helm upgrade --install jenkins jenkinsci/jenkins -n jenkins \
-      -f /root/Linux-Scripts/k8s-helm/jenkins/values.yaml \
-      --wait --timeout 10m >> /var/log/k8s-bootstrap.log 2>&1; then
+  if helm "${HELM_ARGS[@]}" >> /var/log/k8s-bootstrap.log 2>&1; then
     echo "[BOOTSTRAP] Jenkins chart installed." | tee -a /var/log/k8s-bootstrap.log
     break
   fi
@@ -328,8 +327,6 @@ for i in $(seq 1 $max); do
     exit 1
   fi
 done
-
-
 
 kubectl -n jenkins rollout status statefulset/jenkins
 
