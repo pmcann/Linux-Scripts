@@ -280,6 +280,23 @@ helm upgrade --install jenkins jenkinsci/jenkins \
 
 kubectl -n jenkins rollout status statefulset/jenkins
 
+# place this AFTER Jenkins rollout in k8s-setup-master.sh
+NGROK_AUTHTOKEN="$(aws ssm get-parameter --with-decryption \
+  --name /tripfinder/ngrok/authtoken --query 'Parameter.Value' --output text 2>/dev/null || true)"
+NGROK_DOMAIN="$(aws ssm get-parameter \
+  --name /tripfinder/ngrok/domain --query 'Parameter.Value' --output text 2>/dev/null || true)"
+
+if [ -n "$NGROK_AUTHTOKEN" ] && [ -n "$NGROK_DOMAIN" ] && [ -f "$REPO_DIR/k8s-tripfinder/ngrok-jenkins.yaml" ]; then
+  echo "[BOOTSTRAP] Creating ngrok Secret and applying tunnel…"
+  kubectl -n jenkins create secret generic ngrok-secret \
+    --from-literal=NGROK_AUTHTOKEN="$NGROK_AUTHTOKEN" \
+    --from-literal=NGROK_DOMAIN="$NGROK_DOMAIN" \
+    --dry-run=client -o yaml | kubectl apply -f -
+  kubectl -n jenkins apply -f "$REPO_DIR/k8s-tripfinder/ngrok-jenkins.yaml"
+else
+  echo "[BOOTSTRAP][WARN] ngrok params or manifest missing; skipping tunnel."
+fi
+
 # --- RBAC: allow Jenkins to run agent Pods in 'jenkins' ns ---
 cat <<'EOF' | kubectl apply -f -
 apiVersion: rbac.authorization.k8s.io/v1
