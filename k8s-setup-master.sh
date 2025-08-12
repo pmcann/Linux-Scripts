@@ -253,13 +253,40 @@ helm upgrade --install traefik traefik/traefik \
   --set ingressClass.enabled=true \
   --set ingressClass.isDefaultClass=true 
 
+# --- AWS EBS CSI driver (no --wait) ---
+helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver || true
+helm repo update
+
+helm upgrade --install aws-ebs-csi-driver aws-ebs-csi-driver/aws-ebs-csi-driver \
+  --namespace kube-system \
+  --set controller.serviceAccount.create=true \
+  --set controller.serviceAccount.name=ebs-csi-controller-sa
+
+# --- StorageClass for Jenkins PVC (gp3) ---
+cat >/tmp/sc-ebs-gp3.yaml <<'YAML'
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ebs-gp3
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  fsType: ext4
+reclaimPolicy: Retain
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+YAML
+kubectl apply -f /tmp/sc-ebs-gp3.yaml
+
 echo "[BOOTSTRAP] Installing Jenkins…"
 helm upgrade --install jenkins jenkinsci/jenkins \
   --namespace jenkins \
   --set controller.serviceType=NodePort \
   --set controller.servicePort=8080 \
   --set controller.nodePort=32010 \
-  --set persistence.enabled=false \
+  --set persistence.enabled=true \
+  --set persistence.storageClass=ebs-gp3 \
+  --set persistence.size=30Gi \
   -f "$REPO_DIR/k8s-helm/jenkins/values.yaml" \
   -f "$REPO_DIR/k8s-helm/jenkins/values-kubecloud.yaml"
 
