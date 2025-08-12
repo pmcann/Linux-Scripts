@@ -1,0 +1,36 @@
+{
+  "Rules": [
+    {
+      "ID": "artifacts-tiering",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "artifacts/" },
+      "Transitions": [
+        { "Days": 30, "StorageClass": "STANDARD_IA" },
+        { "Days": 90, "StorageClass": "GLACIER" }
+      ],
+      "NoncurrentVersionTransitions": [
+        { "NoncurrentDays": 30, "StorageClass": "STANDARD_IA" },
+        { "NoncurrentDays": 90, "StorageClass": "GLACIER" }
+      ]
+    },
+    {
+      "ID": "config-backups-tiering",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "backups/config/" },
+      "Transitions": [
+        { "Days": 30, "StorageClass": "STANDARD_IA" },
+        { "Days": 180, "StorageClass": "GLACIER" }
+      ],
+      "NoncurrentVersionTransitions": [
+        { "NoncurrentDays": 30, "StorageClass": "STANDARD_IA" },
+        { "NoncurrentDays": 180, "StorageClass": "GLACIER" }
+      ]
+    },
+    {
+      "ID": "abort-incomplete-mpu",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "" },
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
+    }
+  ]
+}

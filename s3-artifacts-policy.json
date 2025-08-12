@@ -1,0 +1,18 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    { "Effect": "Allow",
+      "Action": ["s3:ListBucket"],
+      "Resource": "arn:aws:s3:::tripfinder-ci-artifacts-374965728115-us-east-1",
+      "Condition": {"StringLike": {"s3:prefix": ["artifacts/*","backups/*","releases/*"]}}
+    },
+    { "Effect": "Allow",
+      "Action": ["s3:PutObject","s3:GetObject","s3:DeleteObject"],
+      "Resource": [
+        "arn:aws:s3:::tripfinder-ci-artifacts-374965728115-us-east-1/artifacts/*",
+        "arn:aws:s3:::tripfinder-ci-artifacts-374965728115-us-east-1/backups/*",
+        "arn:aws:s3:::tripfinder-ci-artifacts-374965728115-us-east-1/releases/*"
+      ]
+    }
+  ]
+}

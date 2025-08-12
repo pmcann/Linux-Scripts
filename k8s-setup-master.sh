@@ -1,3 +1,4 @@
+cat k8s-setup-master.sh 
 #!/bin/bash
 set -e
 sleep 3
@@ -528,4 +529,12 @@ else
 fi
 
 echo "[BOOTSTRAP] Jenkins, Argo CD, Traefik, Monitoring, EBS CSI, StorageClass, and AWS Backup configured."
+
+[1]-  Done                    konsole -e bash -c "
+    ssh -t -o StrictHostKeyChecking=no -i $KEY ubuntu@$WORKER_IP1      'echo \"connected to worker\";        export PS1=\"[\\u@\\[\\e[32m\\]WORKER\\[\\e[0m\\] \\W]\\\\$ \";        sudo bash -c $JOIN_ESCAPED;
+       exec bash --noprofile --norc'
+  "
+[2]+  Done                    konsole -e bash -c "
+    ssh -t -o StrictHostKeyChecking=no -i $KEY ubuntu@$WORKER_IP2       'echo \"connected to worker\";        export PS1=\"[\\u@\\[\\e[32m\\]WORKER\\[\\e[0m\\] \\W]\\\\$ \";        sudo bash -c $JOIN_ESCAPED;
+       exec bash --noprofile --norc'
 
