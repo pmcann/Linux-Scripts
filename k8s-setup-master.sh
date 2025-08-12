@@ -158,15 +158,40 @@ chmod +x get_helm.sh
 rm -f get_helm.sh
 helm version >> /var/log/k8s-bootstrap.log 2>&1 || echo "[WARN] Helm version check failed" >> /var/log/k8s-bootstrap.log
 
-# ── Add all Helm repos ─────────────────────────────────────────────────────────
+# ── Add Helm repos (incl. EBS CSI) ────────────────────────────────────────────
 echo "[BOOTSTRAP] Adding Helm chart repositories..."
 helm repo add traefik https://traefik.github.io/charts
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo add jenkinsci https://charts.jenkins.io
 helm repo add argo https://argoproj.github.io/argo-helm
+helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver
 helm repo update
 
-# ── Install AWS CLI v2 (needed for ECR + SSM) ─────────────────────────────────
+# ── Install AWS EBS CSI driver (controller + node plugin) ─────────────────────
+echo "[BOOTSTRAP] Installing AWS EBS CSI driver..."
+helm upgrade --install aws-ebs-csi-driver aws-ebs-csi-driver/aws-ebs-csi-driver \
+  --namespace kube-system \
+  --set controller.serviceAccount.create=true \
+  --set controller.serviceAccount.name=ebs-csi-controller-sa
+
+# Create gp3 StorageClass (Retain + WaitForFirstConsumer + expansion)
+cat >/tmp/sc-ebs-gp3.yaml <<'YAML'
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ebs-gp3
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  fsType: ext4
+reclaimPolicy: Retain
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+YAML
+kubectl apply -f /tmp/sc-ebs-gp3.yaml
+kubectl get sc
+
+# ── Install AWS CLI v2 (needed for ECR + SSM + Backup) ────────────────────────
 cd /tmp
 curl -s "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o awscliv2.zip
 unzip -q awscliv2.zip
@@ -223,7 +248,7 @@ kubectl -n jenkins create secret generic jenkins-admin-secret \
   --from-literal=jenkins-admin-password="$JENKINS_ADMIN_PASSWORD" \
   --dry-run=client -o yaml | kubectl apply -f -
 
-# Optional legacy secret (not used by current JCasC path, safe to keep)
+# Optional legacy secret
 kubectl -n jenkins create secret generic jenkins-github \
   --from-literal=pat="$GITHUB_PAT" \
   --dry-run=client -o yaml | kubectl apply -f -
@@ -253,7 +278,7 @@ kubectl -n default create secret docker-registry ecr-secret \
 kubectl -n default patch serviceaccount default --type merge \
   -p '{"imagePullSecrets":[{"name":"ecr-secret"}]}' || true
 
-# ── Ensure jenkins-env Secret for containerEnv (GITHUB_TOKEN, ADMIN, optional ECR_PASSWORD) ──
+# ── Ensure jenkins-env Secret for containerEnv ────────────────────────────────
 echo "[BOOTSTRAP] Ensuring jenkins-env Secret..." | tee -a /var/log/k8s-bootstrap.log
 args=()
 [ -n "$GITHUB_PAT" ]            && args+=( --from-literal=GITHUB_TOKEN="$GITHUB_PAT" )
@@ -266,6 +291,95 @@ else
     --dry-run=client -o yaml | kubectl apply -f - >> /var/log/k8s-bootstrap.log 2>&1
   echo "[BOOTSTRAP] jenkins-env ensured." | tee -a /var/log/k8s-bootstrap.log
 fi
+
+# ── AWS Backup: vault + daily plan + selection-by-tag (idempotent) ────────────
+echo "[BOOTSTRAP] Configuring AWS Backup (vault/plan/selection)..."
+VAULT="tripfinder-vault"
+PLAN_NAME="tripfinder-daily-30d"
+SCHEDULE_CRON="cron(30 7 * * ? *)"   # 07:30 UTC = 03:30 ET (summer)
+RETENTION_DAYS=30
+
+# Ensure service-linked role exists
+aws iam create-service-linked-role --aws-service-name backup.amazonaws.com >/dev/null 2>&1 || true
+
+# Create vault if missing
+if ! aws backup list-backup-vaults --query "BackupVaultList[?BackupVaultName=='${VAULT}'] | [0].BackupVaultName" --output text 2>/dev/null | grep -q "${VAULT}"; then
+  aws backup create-backup-vault --backup-vault-name "${VAULT}" || true
+  echo "[BOOTSTRAP] Created backup vault: ${VAULT}"
+else
+  echo "[BOOTSTRAP] Backup vault exists: ${VAULT}"
+fi
+
+# Find or create plan
+PLAN_ID=$(aws backup list-backup-plans --query "BackupPlansList[?BackupPlanName=='${PLAN_NAME}'] | [0].BackupPlanId" --output text 2>/dev/null)
+if [[ -z "$PLAN_ID" || "$PLAN_ID" == "None" ]]; then
+  cat >/tmp/plan-30d.json <<EOF
+{
+  "BackupPlanName": "${PLAN_NAME}",
+  "Rules": [
+    {
+      "RuleName": "daily-0730utc",
+      "TargetBackupVaultName": "${VAULT}",
+      "ScheduleExpression": "${SCHEDULE_CRON}",
+      "StartWindowMinutes": 60,
+      "CompletionWindowMinutes": 180,
+      "Lifecycle": { "DeleteAfterDays": ${RETENTION_DAYS} }
+    }
+  ]
+}
+EOF
+  PLAN_ID=$(aws backup create-backup-plan --backup-plan file:///tmp/plan-30d.json --query BackupPlanId --output text)
+  echo "[BOOTSTRAP] Created backup plan: ${PLAN_NAME} (${PLAN_ID})"
+else
+  echo "[BOOTSTRAP] Backup plan exists: ${PLAN_NAME} (${PLAN_ID})"
+fi
+
+# Use the service-linked role for selections
+SLR_ARN=$(aws iam get-role --role-name AWSServiceRoleForBackup --query Role.Arn --output text 2>/dev/null || true)
+
+# Create tag-based selection if missing
+if [[ -n "$PLAN_ID" && -n "$SLR_ARN" ]]; then
+  SEL_COUNT=$(aws backup list-backup-selections --backup-plan-id "$PLAN_ID" \
+    --query "length(BackupSelectionsList[?SelectionName=='tag-backup-tripfinder'])" --output text 2>/dev/null || echo 0)
+  if [[ "$SEL_COUNT" == "0" || "$SEL_COUNT" == "None" ]]; then
+    cat >/tmp/selection.json <<EOF
+{
+  "SelectionName": "tag-backup-tripfinder",
+  "IamRoleArn": "${SLR_ARN}",
+  "ListOfTags": [
+    { "ConditionType": "STRINGEQUALS", "ConditionKey": "backup", "ConditionValue": "tripfinder" }
+  ]
+}
+EOF
+    aws backup create-backup-selection --backup-plan-id "$PLAN_ID" --backup-selection file:///tmp/selection.json >/dev/null
+    echo "[BOOTSTRAP] Created backup selection 'tag-backup-tripfinder' on plan ${PLAN_NAME}"
+  else
+    echo "[BOOTSTRAP] Backup selection 'tag-backup-tripfinder' already present."
+  fi
+else
+  echo "[BOOTSTRAP][WARN] Could not resolve plan id or service-linked role; skipping selection creation."
+fi
+
+# Auto-tag PV volumes hourly so they're protected by the plan
+install -m 0755 /dev/stdin /usr/local/bin/tag-pv-volumes.sh <<'EOS'
+#!/usr/bin/env bash
+set -euo pipefail
+LOG="/var/log/tag-pv-volumes.log"
+VOL_IDS=$(kubectl get pv -o jsonpath='{range .items[*]}{.spec.csi.volumeHandle}{"\n"}{end}' 2>/dev/null | grep '^vol-' || true)
+if [ -z "$VOL_IDS" ]; then
+  echo "$(date -Is) no PV-backed volumes found" >> "$LOG"
+  exit 0
+fi
+for VOL in $VOL_IDS; do
+  if aws ec2 create-tags --resources "$VOL" --tags Key=backup,Value=tripfinder >/dev/null 2>&1; then
+    echo "$(date -Is) tagged $VOL backup=tripfinder" >> "$LOG"
+  else
+    echo "$(date -Is) WARN: failed to tag $VOL (missing ec2:CreateTags?)" >> "$LOG"
+  fi
+done
+EOS
+( crontab -l 2>/dev/null; echo "17 * * * * /usr/local/bin/tag-pv-volumes.sh" ) | crontab -
+echo "[BOOTSTRAP] Installed cron to tag PV volumes hourly."
 
 # ── Install Traefik ───────────────────────────────────────────────────────────
 echo "[BOOTSTRAP] Installing Traefik ingress controller..."
@@ -308,7 +422,7 @@ roleRef:
   name: jenkins-credentials-read
 EOF
 
-# ── Install Jenkins with retry ────────────────────────────────────────────────
+# ── Install Jenkins with retry (still ephemeral; PVC enable comes later) ──────
 echo "[BOOTSTRAP] Installing Jenkins..." | tee -a /var/log/k8s-bootstrap.log
 kubectl create ns jenkins --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
@@ -380,11 +494,6 @@ roleRef:
   name: edit
 EOF
 
-# ── Deploy Tripfinder workloads (optional, keep commented if Argo handles it) ─
-# kubectl apply -f "$REPO_DIR/k8s-tripfinder/backend.yaml"
-# kubectl apply -f "$REPO_DIR/k8s-tripfinder/frontend.yaml"
-# kubectl apply -f "$REPO_DIR/k8s-tripfinder/tripfinder-ingress.yaml"
-
 # ── Install Prometheus + Grafana ──────────────────────────────────────────────
 echo "[BOOTSTRAP] Installing Prometheus + Grafana stack..."
 kubectl get namespace monitoring >/dev/null 2>&1 || kubectl create namespace monitoring
@@ -418,5 +527,5 @@ else
   echo "[BOOTSTRAP][WARN] $APP_FILE not found; skipping Argo Application bootstrap."
 fi
 
-echo "[BOOTSTRAP] Jenkins, Argo CD, Traefik, and Monitoring installed."
+echo "[BOOTSTRAP] Jenkins, Argo CD, Traefik, Monitoring, EBS CSI, StorageClass, and AWS Backup configured."
 
