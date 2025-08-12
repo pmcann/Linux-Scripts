@@ -220,7 +220,8 @@ if [ ${#args[@]} -gt 0 ]; then
   kubectl -n jenkins create secret generic jenkins-env "${args[@]}" --dry-run=client -o yaml | kubectl apply -f - >> /var/log/k8s-bootstrap.log 2>&1
 fi
 
-# ── AWS Backup (wrapped non-fatal) ────────────────────────────────────────────
+
+# ── AWS Backup (non-fatal, exit-code aware) ───────────────────────────────────
 echo "[BOOTSTRAP] Configuring AWS Backup (non-fatal block)..."
 set +e
 VAULT="tripfinder-vault"
@@ -228,16 +229,26 @@ PLAN_NAME="tripfinder-daily-30d"
 SCHEDULE_CRON="cron(30 7 * * ? *)"   # 07:30 UTC (03:30 ET summer)
 RETENTION_DAYS=30
 
+# Make sure service-linked role exists (ok if it already does)
 aws iam create-service-linked-role --aws-service-name backup.amazonaws.com >/dev/null 2>&1
 
-if aws backup list-backup-vaults >/dev/null 2>&1; then
-  if ! aws backup list-backup-vaults --query "BackupVaultList[?BackupVaultName=='${VAULT}'] | [0].BackupVaultName" --output text 2>/dev/null | grep -q "${VAULT}"; then
-    aws backup create-backup-vault --backup-vault-name "${VAULT}" >/dev/null 2>&1
+# Check/create vault
+VAULT_READY=0
+if aws backup describe-backup-vault --backup-vault-name "${VAULT}" >/dev/null 2>&1; then
+  echo "[BOOTSTRAP] Backup vault exists: ${VAULT}"
+  VAULT_READY=1
+else
+  aws backup create-backup-vault --backup-vault-name "${VAULT}"
+  if [ $? -eq 0 ]; then
     echo "[BOOTSTRAP] Created backup vault: ${VAULT}"
+    VAULT_READY=1
   else
-    echo "[BOOTSTRAP] Backup vault exists: ${VAULT}"
+    echo "[BOOTSTRAP][WARN] Failed to create backup vault '${VAULT}'. Skipping plan/selection."
   fi
+fi
 
+if [ "$VAULT_READY" -eq 1 ]; then
+  # Ensure plan
   PLAN_ID=$(aws backup list-backup-plans --query "BackupPlansList[?BackupPlanName=='${PLAN_NAME}'] | [0].BackupPlanId" --output text 2>/dev/null)
   if [ -z "$PLAN_ID" ] || [ "$PLAN_ID" = "None" ]; then
     cat >/tmp/plan-30d.json <<EOF
@@ -256,36 +267,47 @@ if aws backup list-backup-vaults >/dev/null 2>&1; then
 }
 EOF
     PLAN_ID=$(aws backup create-backup-plan --backup-plan file:///tmp/plan-30d.json --query BackupPlanId --output text 2>/dev/null)
-    echo "[BOOTSTRAP] Created backup plan: ${PLAN_NAME} (${PLAN_ID})"
+    if [ -n "$PLAN_ID" ] && [ "$PLAN_ID" != "None" ]; then
+      echo "[BOOTSTRAP] Created backup plan: ${PLAN_NAME} (${PLAN_ID})"
+    else
+      echo "[BOOTSTRAP][WARN] Failed to create backup plan '${PLAN_NAME}'. Skipping selection."
+      PLAN_ID=""
+    fi
   else
     echo "[BOOTSTRAP] Backup plan exists: ${PLAN_NAME} (${PLAN_ID})"
   fi
 
-  SLR_ARN=$(aws iam get-role --role-name AWSServiceRoleForBackup --query Role.Arn --output text 2>/dev/null)
-  if [ -n "$PLAN_ID" ] && [ -n "$SLR_ARN" ]; then
-    SEL_COUNT=$(aws backup list-backup-selections --backup-plan-id "$PLAN_ID" --query "length(BackupSelectionsList[?SelectionName=='tag-backup-tripfinder'])" --output text 2>/dev/null)
-    if [ "$SEL_COUNT" = "0" ] || [ "$SEL_COUNT" = "None" ] || [ -z "$SEL_COUNT" ]; then
-      cat >/tmp/selection.json <<EOF
-{
-  "SelectionName": "tag-backup-tripfinder",
+  # Ensure selection (tag-based) if we have a plan
+  if [ -n "$PLAN_ID" ]; then
+    SLR_ARN=$(aws iam get-role --role-name AWSServiceRoleForBackup --query Role.Arn --output text 2>/dev/null)
+    if [ -n "$SLR_ARN" ] && [ "$SLR_ARN" != "None" ]; then
+      SEL_COUNT=$(aws backup list-backup-selections --backup-plan-id "$PLAN_ID" \
+        --query "length(BackupSelectionsList[?SelectionName=='tag-backup-tripfinder'])" \
+        --output text 2>/dev/null)
+      if [ "$SEL_COUNT" = "0" ] || [ "$SEL_COUNT" = "None" ]; then
+        cat >/tmp/selection.json <<EOF
+{ "SelectionName": "tag-backup-tripfinder",
   "IamRoleArn": "${SLR_ARN}",
-  "ListOfTags": [
-    { "ConditionType": "STRINGEQUALS", "ConditionKey": "backup", "ConditionValue": "tripfinder" }
-  ]
-}
+  "ListOfTags": [ { "ConditionType": "STRINGEQUALS",
+                    "ConditionKey": "backup", "ConditionValue": "tripfinder" } ] }
 EOF
-      aws backup create-backup-selection --backup-plan-id "$PLAN_ID" --backup-selection file:///tmp/selection.json >/dev/null 2>&1
-      echo "[BOOTSTRAP] Created backup selection 'tag-backup-tripfinder'"
+        if aws backup create-backup-selection --backup-plan-id "$PLAN_ID" --backup-selection file:///tmp/selection.json >/dev/null 2>&1; then
+          echo "[BOOTSTRAP] Created backup selection 'tag-backup-tripfinder'"
+        else
+          echo "[BOOTSTRAP][WARN] Failed to create backup selection."
+        fi
+      else
+        echo "[BOOTSTRAP] Backup selection already present."
+      fi
     else
-      echo "[BOOTSTRAP] Backup selection already present."
+      echo "[BOOTSTRAP][WARN] Service-linked role not found; skipping selection."
     fi
-  else
-    echo "[BOOTSTRAP][WARN] Could not resolve plan id or service-linked role; skipping selection."
   fi
-else
-  echo "[BOOTSTRAP][WARN] Skipping AWS Backup setup (API not permitted)."
 fi
 set -e
+
+
+
 
 # Hourly PV auto-tagger
 install -m 0755 /dev/stdin /usr/local/bin/tag-pv-volumes.sh <<'EOS'
