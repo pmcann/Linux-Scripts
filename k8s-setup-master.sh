@@ -291,53 +291,6 @@ VOL_SIZE_GiB="$(aws ec2 describe-volumes --volume-ids "$VOL_ID" \
 VOL_AZ="$(aws ec2 describe-volumes --volume-ids "$VOL_ID" \
   --query 'Volumes[0].AvailabilityZone' --output text)"
 
-# (Optional safety) If the volume is still attached somewhere, force-detach it.
-# aws ec2 detach-volume --volume-id "$VOL_ID" --force || true
-
-cat >/tmp/jenkins-pv-pvc.yaml <<YAML
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: jenkins-pv
-spec:
-  capacity:
-    storage: ${VOL_SIZE_GiB}Gi
-  volumeMode: Filesystem
-  accessModes: [ "ReadWriteOnce" ]
-  persistentVolumeReclaimPolicy: Retain
-  storageClassName: ""                 # static PV (no dynamic provisioner)
-  claimRef:                            # prebind to the PVC below
-    namespace: jenkins
-    name: jenkins
-  csi:
-    driver: ebs.csi.aws.com
-    volumeHandle: ${VOL_ID}
-    fsType: ext4
-  nodeAffinity:
-    required:
-      nodeSelectorTerms:
-      - matchExpressions:
-        - key: topology.kubernetes.io/zone
-          operator: In
-          values: [ ${VOL_AZ} ]
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: jenkins
-  namespace: jenkins
-spec:
-  accessModes: [ "ReadWriteOnce" ]
-  resources:
-    requests:
-      storage: ${VOL_SIZE_GiB}Gi
-  storageClassName: ""                 # must match the static PV (empty)
-  volumeName: jenkins-pv               # bind to the PV above
-YAML
-
-kubectl apply -f /tmp/jenkins-pv-pvc.yaml
-
-wait 10 
 
 # --- StorageClass for Jenkins PVC (gp3) ---
 cat >/tmp/sc-ebs-gp3.yaml <<'YAML'
