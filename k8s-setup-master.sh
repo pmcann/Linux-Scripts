@@ -337,11 +337,7 @@ YAML
 
 kubectl apply -f /tmp/jenkins-pv-pvc.yaml
 
-# Wait until the claim is Bound (quick in practice)
-kubectl -n jenkins wait --for=condition=Bound pvc/jenkins --timeout=2m || true
-
-
-
+wait 10 
 
 # --- StorageClass for Jenkins PVC (gp3) ---
 cat >/tmp/sc-ebs-gp3.yaml <<'YAML'
