@@ -186,6 +186,21 @@ ACCOUNT_ID="374965728115"
 REGION="${AWS_REGION:-us-east-1}"
 ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
 
+
+# --- ngrok: pull values from SSM, create secret, apply manifest ---
+AUTHTOKEN="$(aws ssm get-parameter --with-decryption \
+  --name /tripfinder/ngrok/authtoken --query 'Parameter.Value' --output text 2>/dev/null)"
+DOMAIN="$(aws ssm get-parameter \
+  --name /tripfinder/ngrok/domain --query 'Parameter.Value' --output text 2>/dev/null)"
+
+kubectl -n jenkins delete secret ngrok-secret --ignore-not-found
+kubectl -n jenkins create secret generic ngrok-secret \
+  --from-literal=NGROK_AUTHTOKEN="${AUTHTOKEN}" \
+  --from-literal=NGROK_DOMAIN="${DOMAIN}"
+
+kubectl apply -f "$REPO_DIR/k8s-tripfinder/ngrok-jenkins.yaml"
+
+
 JENKINS_ADMIN_PASSWORD="$(aws ssm get-parameter --with-decryption \
   --name /tripfinder/jenkins/admin_password --query 'Parameter.Value' \
   --output text 2>/dev/null || echo 'ChangeMe!')"
