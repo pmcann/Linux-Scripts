@@ -271,28 +271,12 @@ helm upgrade --install traefik traefik/traefik \
 # --- AWS EBS CSI driver (no --wait) ---
 helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver || true
 helm repo update
-
 helm upgrade --install aws-ebs-csi-driver aws-ebs-csi-driver/aws-ebs-csi-driver \
   --namespace kube-system \
   --set controller.serviceAccount.create=true \
   --set controller.serviceAccount.name=ebs-csi-controller-sa
 
-
-# --- Static PV + PVC for Jenkins (bind to your preserved EBS volume) ---
-
-# Read the preserved EBS volume ID from SSM
-VOL_ID="$(aws ssm get-parameter \
-  --name /tripfinder/jenkins/ebs_volume_id \
-  --query 'Parameter.Value' --output text)"
-
-# Look up its size and AZ (PV must match the volume's AZ)
-VOL_SIZE_GiB="$(aws ec2 describe-volumes --volume-ids "$VOL_ID" \
-  --query 'Volumes[0].Size' --output text)"
-VOL_AZ="$(aws ec2 describe-volumes --volume-ids "$VOL_ID" \
-  --query 'Volumes[0].AvailabilityZone' --output text)"
-
-
-# --- StorageClass for Jenkins PVC (gp3) ---
+# (Optional) StorageClass used only as a label to match PV/PVC
 cat >/tmp/sc-ebs-gp3.yaml <<'YAML'
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
@@ -308,6 +292,63 @@ volumeBindingMode: WaitForFirstConsumer
 YAML
 kubectl apply -f /tmp/sc-ebs-gp3.yaml
 
+# --- Static PV/PVC for Jenkins using preserved EBS volume ---------------------
+echo "[BOOTSTRAP] Wiring Jenkins PVC to preserved EBS volume…"
+
+VOL_ID="$(aws ssm get-parameter --name /tripfinder/jenkins/ebs_volume_id --query 'Parameter.Value' --output text 2>/dev/null)"
+if [ -z "$VOL_ID" ] || [ "$VOL_ID" = "None" ]; then
+  echo "[ERROR] /tripfinder/jenkins/ebs_volume_id not set in SSM"; exit 1
+fi
+
+VOL_SIZE_Gi="$(aws ec2 describe-volumes --volume-ids "$VOL_ID" --query 'Volumes[0].Size' --output text 2>/dev/null)"
+VOL_AZ="$(aws ec2 describe-volumes --volume-ids "$VOL_ID" --query 'Volumes[0].AvailabilityZone' --output text 2>/dev/null)"
+VOL_STATE="$(aws ec2 describe-volumes --volume-ids "$VOL_ID" --query 'Volumes[0].State' --output text 2>/dev/null)"
+echo "[BOOTSTRAP] Jenkins EBS volume: id=$VOL_ID size=${VOL_SIZE_Gi}Gi az=$VOL_AZ state=$VOL_STATE"
+
+cat >/tmp/jenkins-pv-pvc.yaml <<YAML
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jenkins-pv
+spec:
+  capacity:
+    storage: ${VOL_SIZE_Gi}Gi
+  volumeMode: Filesystem
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ebs-gp3
+  claimRef:
+    namespace: jenkins
+    name: jenkins
+  csi:
+    driver: ebs.csi.aws.com
+    volumeHandle: ${VOL_ID}
+    fsType: ext4
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: topology.kubernetes.io/zone
+          operator: In
+          values: ["${VOL_AZ}"]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jenkins
+  namespace: jenkins
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: ebs-gp3
+  resources:
+    requests:
+      storage: ${VOL_SIZE_Gi}Gi
+  volumeName: jenkins-pv
+YAML
+
+kubectl apply -f /tmp/jenkins-pv-pvc.yaml
+echo "[BOOTSTRAP] Applied static PV/PVC for Jenkins."
+
 echo "[BOOTSTRAP] Installing Jenkins…"
 helm upgrade --install jenkins jenkinsci/jenkins \
   --namespace jenkins \
@@ -318,6 +359,10 @@ helm upgrade --install jenkins jenkinsci/jenkins \
   --set persistence.existingClaim=jenkins \
   -f "$REPO_DIR/k8s-helm/jenkins/values.yaml" \
   -f "$REPO_DIR/k8s-helm/jenkins/values-kubecloud.yaml"
+
+
+
+
 
 kubectl -n jenkins rollout status statefulset/jenkins 
 
