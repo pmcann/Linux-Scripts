@@ -299,9 +299,6 @@ helm upgrade --install jenkins jenkinsci/jenkins \
   --set controller.serviceType=NodePort \
   --set controller.servicePort=8080 \
   --set controller.nodePort=32010 \
-  --set persistence.enabled=true \
-  --set persistence.storageClass=ebs-gp3 \
-  --set persistence.size=30Gi \
   -f "$REPO_DIR/k8s-helm/jenkins/values.yaml" \
   -f "$REPO_DIR/k8s-helm/jenkins/values-kubecloud.yaml"
 
