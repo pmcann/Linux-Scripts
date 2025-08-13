@@ -54,9 +54,9 @@ controller:
                 jenkinsUrl: "http://jenkins.jenkins.svc.cluster.local:8080"
                 jenkinsTunnel: "jenkins-agent.jenkins.svc.cluster.local:50000"
                 webSocket: true
-  persistence:
-  enabled: true
-  existingClaim: jenkins   # <- use the PVC you create/bind to the preserved EBS volume
-  # storageClass: ""       # leave unset when using existingClaim
-  # size: ""               # leave unset when using existingClaim
+ persistence:
+   enabled: true
+   existingClaim: jenkins   # <- use the PVC you create/bind to the preserved EBS volume
+   # storageClass: ""       # leave unset when using existingClaim
+   # size: ""               # leave unset when using existingClaim
  
