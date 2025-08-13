@@ -69,7 +69,7 @@ controller:
                         workingDir: "/home/jenkins/agent"
                       - name: "busybox"
                         image: "alpine:3.20"
-                        command: ["cat"]
+                        command: "cat"
                         ttyEnabled: true
                         workingDir: "/home/jenkins/agent"
 
