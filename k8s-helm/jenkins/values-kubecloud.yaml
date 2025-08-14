@@ -21,10 +21,12 @@ controller:
       value: "https://updates.jenkins.io/download"
     - name: JENKINS_INCREMENTALS_REPO_MIRROR
       value: "https://repo.jenkins-ci.org/incrementals"
+
   admin:
     existingSecret: jenkins-admin-secret
     userKey: jenkins-admin-user
     passwordKey: jenkins-admin-password
+
   installPlugins:
     - kubernetes
     - configuration-as-code
@@ -41,22 +43,14 @@ controller:
     - matrix-auth
     - kubernetes-credentials-provider
     - job-dsl                 # <-- REQUIRED for JCasC 'jobs:' block
+
   javaOpts: "-Djenkins.install.runSetupWizard=false"
-  JCasC:
-    configScripts:
-      kubernetescloud: |
-        jenkins:
-          clouds:
-            - kubernetes:
-                name: "kubernetes"
-                serverUrl: "https://kubernetes.default.svc"
-                namespace: "jenkins"
-                jenkinsUrl: "http://jenkins.jenkins.svc.cluster.local:8080"
-                jenkinsTunnel: "jenkins-agent.jenkins.svc.cluster.local:50000"
-                webSocket: true
+
+# (intentionally no "controller.JCasC.configScripts" here)
+
 persistence:
   enabled: true
   existingClaim: jenkins   # <- use the PVC you create/bind to the preserved EBS volume
   # storageClass: ""       # leave unset when using existingClaim
   # size: ""               # leave unset when using existingClaim
- 
+
