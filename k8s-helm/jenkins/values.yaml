@@ -63,12 +63,28 @@ controller:
                     nodeUsageMode: "NORMAL"
                     containers:
                       - name: "jnlp"
-                        image: "jenkins/inbound-agent:alpine-jdk17"
-                        args: "^${computer.jnlpmac} ^${computer.name}"
+                        image: "jenkins/inbound-agent:jdk17"   # multi-arch (works on ARM64)
+                        args: '${computer.jnlpmac} ${computer.name}'
                         ttyEnabled: true
                         workingDir: "/home/jenkins/agent"
                       - name: "busybox"
                         image: "alpine:3.20"
+                        command: "cat"                           # scalar (not a list)
+                        ttyEnabled: true
+                        workingDir: "/home/jenkins/agent"
+
+                  - name: "kaniko"
+                    label: "k8s-kaniko"
+                    serviceAccount: "jenkins"
+                    nodeUsageMode: "NORMAL"
+                    containers:
+                      - name: "jnlp"
+                        image: "jenkins/inbound-agent:jdk17"   # multi-arch
+                        args: '${computer.jnlpmac} ${computer.name}'
+                        ttyEnabled: true
+                        workingDir: "/home/jenkins/agent"
+                      - name: "kaniko"
+                        image: "gcr.io/kaniko-project/executor:latest"
                         command: "cat"
                         ttyEnabled: true
                         workingDir: "/home/jenkins/agent"
@@ -95,4 +111,12 @@ controller:
 persistence:
   enabled: true
   existingClaim: jenkins
+
+rbac:
+  create: true
+  readSecrets: true
+
+serviceAccount:
+  create: true
+  name: jenkins
 
