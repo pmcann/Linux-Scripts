@@ -1,7 +1,9 @@
 controller:
   image:
     tag: lts-jdk17
-
+  sidecars:
+    configAutoReload:
+      enabled: false  
   # Keep web service reachable the same way you have it now
   serviceType: NodePort
   servicePort: 8080
