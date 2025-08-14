@@ -85,7 +85,8 @@ controller:
                         workingDir: "/home/jenkins/agent"
                       - name: "kaniko"
                         image: "gcr.io/kaniko-project/executor:latest"
-                        command: "cat"
+                        command: "/busybox/cat"        # <— NOT "sh" (kaniko image has no /bin/sh)
+                        shell: "/busybox/sh"           # <— tell Jenkins which shell to use for `sh` steps
                         ttyEnabled: true
                         workingDir: "/home/jenkins/agent"
 
