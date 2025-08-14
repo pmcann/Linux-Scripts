@@ -1,10 +1,12 @@
 controller:
   image:
     tag: lts-jdk17
+
   sidecars:
     configAutoReload:
-      enabled: false  
-  # Keep web service reachable the same way you have it now
+      enabled: false
+
+  # Web service exposure (matches what you already run)
   serviceType: NodePort
   servicePort: 8080
   nodePort: 32010
@@ -65,7 +67,7 @@ controller:
                     nodeUsageMode: "NORMAL"
                     containers:
                       - name: "jnlp"
-                        image: "jenkins/inbound-agent:jdk17"   # multi-arch (works on ARM64)
+                        image: "jenkins/inbound-agent:jdk17"   # multi-arch
                         args: '${computer.jnlpmac} ${computer.name}'
                         ttyEnabled: true
                         workingDir: "/home/jenkins/agent"
@@ -87,8 +89,8 @@ controller:
                         workingDir: "/home/jenkins/agent"
                       - name: "kaniko"
                         image: "gcr.io/kaniko-project/executor:latest"
-                        command: "/busybox/cat"        # <— NOT "sh" (kaniko image has no /bin/sh)
-                        shell: "/busybox/sh"           # <— tell Jenkins which shell to use for `sh` steps
+                        command: "/busybox/cat"                 # kaniko image has no /bin/sh
+                        shell: "/busybox/sh"                    # shell for `sh` steps
                         ttyEnabled: true
                         workingDir: "/home/jenkins/agent"
 
@@ -110,11 +112,15 @@ controller:
           location:
             url: "http://jenkins.jenkins.svc.cluster.local:8080"
 
-# Keep your durable storage (PVC named 'jenkins')
+      # Hard override to prevent the chart from generating a second JCasC file
+      kubernetescloud: null
+
+# Durable storage (binds to your preserved EBS via existing PVC)
 persistence:
   enabled: true
   existingClaim: jenkins
 
+# RBAC so the kubernetes-credentials-provider can read Secrets
 rbac:
   create: true
   readSecrets: true
