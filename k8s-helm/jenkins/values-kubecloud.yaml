@@ -1,4 +1,5 @@
 controller:
+  # Environment wiring (no JCasC files here)
   containerEnv:
     - name: JENKINS_ADMIN_PASSWORD
       valueFrom:
@@ -21,42 +22,14 @@ controller:
       value: "https://updates.jenkins.io/download"
     - name: JENKINS_INCREMENTALS_REPO_MIRROR
       value: "https://repo.jenkins-ci.org/incrementals"
+
   admin:
     existingSecret: jenkins-admin-secret
     userKey: jenkins-admin-user
     passwordKey: jenkins-admin-password
-  installPlugins:
-    - kubernetes
-    - configuration-as-code
-    - workflow-aggregator
-    - git
-    - git-client
-    - pipeline-utility-steps
-    - pipeline-stage-view
-    - credentials-binding
-    - github
-    - github-branch-source
-    - ansicolor
-    - timestamper
-    - matrix-auth
-    - kubernetes-credentials-provider
-    - job-dsl                 # <-- REQUIRED for JCasC 'jobs:' block
-  javaOpts: "-Djenkins.install.runSetupWizard=false"
-  JCasC:
-    configScripts:
-      kubernetescloud: |
-        jenkins:
-          clouds:
-            - kubernetes:
-                name: "kubernetes"
-                serverUrl: "https://kubernetes.default.svc"
-                namespace: "jenkins"
-                jenkinsUrl: "http://jenkins.jenkins.svc.cluster.local:8080"
-                jenkinsTunnel: "jenkins-agent.jenkins.svc.cluster.local:50000"
-                webSocket: true
+
+# Keep for clarity; doesn’t change storage but mirrors intent
 persistence:
   enabled: true
-  existingClaim: jenkins   # <- use the PVC you create/bind to the preserved EBS volume
-  # storageClass: ""       # leave unset when using existingClaim
-  # size: ""               # leave unset when using existingClaim
- 
+  existingClaim: jenkins
+

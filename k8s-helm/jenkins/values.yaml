@@ -2,25 +2,30 @@ controller:
   image:
     tag: lts-jdk17
 
+  # Disable the sidecar that writes extra JCasC files
   sidecars:
     configAutoReload:
       enabled: false
 
-  # Web service exposure (matches what you already run)
+  # Web service exposure
   serviceType: NodePort
   servicePort: 8080
   nodePort: 32010
 
+  # Consolidated plugin set
   installPlugins:
     - configuration-as-code
     - kubernetes
     - workflow-aggregator
     - git
+    - git-client
     - docker-workflow
+    - pipeline-utility-steps
+    - pipeline-stage-view
     - credentials
+    - credentials-binding
     - plain-credentials
     - ssh-credentials
-    - git-client
     - scm-api
     - script-security
     - structs
@@ -31,11 +36,15 @@ controller:
     - job-dsl
     - github
     - github-branch-source
+    - ansicolor
+    - timestamper
+    - matrix-auth
 
   JCasC:
     enabled: true
     defaultConfig: false
     configScripts:
+      # Single source of truth — everything in one file
       casc: |
         jenkins:
           systemMessage: "Managed via Configuration-as-Code"
@@ -49,7 +58,7 @@ controller:
             loggedInUsersCanDoAnything:
               allowAnonymousRead: false
 
-          # <<< KUBERNETES CLOUD (agent pods) >>>
+          # ---- Kubernetes cloud (agent pods)
           clouds:
             - kubernetes:
                 name: "kubernetes"
@@ -60,6 +69,7 @@ controller:
                 jenkinsTunnel: "jenkins-agent.jenkins.svc.cluster.local:50000"
                 containerCapStr: "10"
                 templates:
+                  # base template for generic shell steps
                   - name: "base"
                     label: "k8s"
                     serviceAccount: "jenkins"
@@ -67,30 +77,31 @@ controller:
                     nodeUsageMode: "NORMAL"
                     containers:
                       - name: "jnlp"
-                        image: "jenkins/inbound-agent:jdk17"   # multi-arch
+                        image: "jenkins/inbound-agent:jdk17"  # multi-arch
                         args: '${computer.jnlpmac} ${computer.name}'
                         ttyEnabled: true
                         workingDir: "/home/jenkins/agent"
                       - name: "busybox"
                         image: "alpine:3.20"
-                        command: "cat"                           # scalar (not a list)
+                        command: "cat"                        # scalar (not a list)
                         ttyEnabled: true
                         workingDir: "/home/jenkins/agent"
 
+                  # kaniko template for container builds
                   - name: "kaniko"
                     label: "k8s-kaniko"
                     serviceAccount: "jenkins"
                     nodeUsageMode: "NORMAL"
                     containers:
                       - name: "jnlp"
-                        image: "jenkins/inbound-agent:jdk17"   # multi-arch
+                        image: "jenkins/inbound-agent:jdk17"
                         args: '${computer.jnlpmac} ${computer.name}'
                         ttyEnabled: true
                         workingDir: "/home/jenkins/agent"
                       - name: "kaniko"
                         image: "gcr.io/kaniko-project/executor:latest"
-                        command: "/busybox/cat"                 # kaniko image has no /bin/sh
-                        shell: "/busybox/sh"                    # shell for `sh` steps
+                        command: "/busybox/cat"               # kaniko image has no /bin/sh
+                        shell: "/busybox/sh"                  # shell for `sh` steps
                         ttyEnabled: true
                         workingDir: "/home/jenkins/agent"
 
@@ -112,15 +123,15 @@ controller:
           location:
             url: "http://jenkins.jenkins.svc.cluster.local:8080"
 
-      # Hard override to prevent the chart from generating a second JCasC file
+      # Guardrail: ensure no extra kubernetescloud.yaml is generated
       kubernetescloud: null
 
-# Durable storage (binds to your preserved EBS via existing PVC)
+# Durable storage (your preserved EBS via PVC)
 persistence:
   enabled: true
   existingClaim: jenkins
 
-# RBAC so the kubernetes-credentials-provider can read Secrets
+# RBAC so kubernetes-credentials-provider can read Secrets
 rbac:
   create: true
   readSecrets: true
