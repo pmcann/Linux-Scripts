@@ -124,7 +124,7 @@ controller:
             url: "http://jenkins.jenkins.svc.cluster.local:8080"
 
       # Guardrail: ensure no extra kubernetescloud.yaml is generated
-      kubernetescloud: null
+      # kubernetescloud: null
 
 # Durable storage (your preserved EBS via PVC)
 persistence:
