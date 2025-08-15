@@ -100,8 +100,9 @@ controller:
                         workingDir: "/home/jenkins/agent"
                       - name: "kaniko"
                         image: "gcr.io/kaniko-project/executor:latest"
-                        command: "/busybox/cat"               # kaniko image has no /bin/sh
-                        shell: "/busybox/sh"                  # shell for `sh` steps
+                        command: "/busybox/sh"
+                        args: "-c tail -f /dev/null"   # keep the sidecar running
+                        shell: "/busybox/sh"           # used by Jenkins `sh` steps
                         ttyEnabled: true
                         workingDir: "/home/jenkins/agent"
 
