@@ -99,10 +99,10 @@ controller:
                         ttyEnabled: true
                         workingDir: "/home/jenkins/agent"
                       - name: "kaniko"
-                        image: "gcr.io/kaniko-project/executor:latest"
+                        image: "gcr.io/kaniko-project/executor:debug"  # <-- was :latest
                         command: "/busybox/sh"
-                        args: "-c tail -f /dev/null"   # keep the sidecar running
-                        shell: "/busybox/sh"           # used by Jenkins `sh` steps
+                        args: "-c tail -f /dev/null"                   # keep the sidecar alive
+                        shell: "/busybox/sh"                           # lets Jenkins `sh` work
                         ttyEnabled: true
                         workingDir: "/home/jenkins/agent"
 
