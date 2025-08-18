@@ -2,7 +2,7 @@ controller:
   image:
     tag: lts-jdk17
 
-  # Disable the sidecar that writes extra JCasC files
+  # Stop the sidecar from writing extra JCasC files
   sidecars:
     configAutoReload:
       enabled: false
@@ -12,7 +12,7 @@ controller:
   servicePort: 8080
   nodePort: 32010
 
-  # Consolidated plugin set
+  # Plugins
   installPlugins:
     - configuration-as-code
     - kubernetes
@@ -44,7 +44,6 @@ controller:
     enabled: true
     defaultConfig: false
     configScripts:
-      # Single source of truth — everything in one file
       casc: |
         jenkins:
           systemMessage: "Managed via Configuration-as-Code"
@@ -78,12 +77,12 @@ controller:
                     containers:
                       - name: "jnlp"
                         image: "jenkins/inbound-agent:jdk17"  # multi-arch
-                        args: '${computer.jnlpmac} ${computer.name}'
+                        # args: '${computer.jnlpmac} ${computer.name}'  # optional; avoids JCasC warnings if commented
                         ttyEnabled: true
                         workingDir: "/home/jenkins/agent"
                       - name: "busybox"
                         image: "alpine:3.20"
-                        command: "cat"                        # scalar (not a list)
+                        command: "cat"
                         ttyEnabled: true
                         workingDir: "/home/jenkins/agent"
 
@@ -95,40 +94,42 @@ controller:
                     containers:
                       - name: "jnlp"
                         image: "jenkins/inbound-agent:jdk17"
-                        args: '${computer.jnlpmac} ${computer.name}'
+                        # args: '${computer.jnlpmac} ${computer.name}'  # optional
                         ttyEnabled: true
                         workingDir: "/home/jenkins/agent"
 
                       - name: "kaniko"
                         image: "gcr.io/kaniko-project/executor:debug"   # has /busybox and /kaniko
                         command: "/busybox/sh"
-                        args: "-c tail -f /dev/null"                    # keep sidecar alive for `container('kaniko'){ sh ... }`
+                        args: "-c tail -f /dev/null"                    # keep sidecar alive for container('kaniko'){ sh ... }
                         shell: "/busybox/sh"                            # lets Jenkins `sh` work in this container
                         envVars:
-                          envVars:
-                            - key: DOCKER_CONFIG
+                          - envVar:
+                              key: DOCKER_CONFIG
                               value: "/kaniko/.docker"
-                            - key: AWS_REGION
-                              value: "us-east-1"            
+                          - envVar:
+                              key: AWS_REGION
+                              value: "us-east-1"
                         ttyEnabled: true
                         workingDir: "/home/jenkins/agent"
 
-  # Raw pod spec to mount the ECR dockerconfig secret as config.json
-  yaml: |
-    spec:
-      containers:
-      - name: kaniko
-        volumeMounts:
-        - name: ecr-dockercfg
-          mountPath: /kaniko/.docker
-          readOnly: true
-      volumes:
-      - name: ecr-dockercfg
-        secret:
-          secretName: ecr-dockercfg
-          items:
-          - key: .dockerconfigjson
-            path: config.json
+                    # Mount the short-lived ECR dockerconfig secret as /kaniko/.docker/config.json
+                    yaml: |
+                      spec:
+                        containers:
+                        - name: kaniko
+                          volumeMounts:
+                          - name: ecr-dockercfg
+                            mountPath: /kaniko/.docker
+                            readOnly: true
+                        volumes:
+                        - name: ecr-dockercfg
+                          secret:
+                            secretName: ecr-dockercfg
+                            items:
+                            - key: .dockerconfigjson
+                              path: config.json
+
         credentials:
           system:
             domainCredentials:
@@ -146,9 +147,6 @@ controller:
         unclassified:
           location:
             url: "http://jenkins.jenkins.svc.cluster.local:8080"
-
-      # Guardrail: ensure no extra kubernetescloud.yaml is generated
-      # kubernetescloud: null
 
 # Durable storage (your preserved EBS via PVC)
 persistence:
