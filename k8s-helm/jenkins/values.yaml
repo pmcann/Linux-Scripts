@@ -105,8 +105,13 @@ controller:
                         args: "-c tail -f /dev/null"                    # keep sidecar alive for `container('kaniko'){ sh ... }`
                         shell: "/busybox/sh"                            # lets Jenkins `sh` work in this container
                         envVars:
-                          - name: DOCKER_CONFIG
-                            value: /kaniko/.docker                      # where config.json will be mounted
+                          envVars:
+                            - envVar:
+                                key: DOCKER_CONFIG
+                                value: "/kaniko/.docker"
+                            - envVar:
+                                key: AWS_REGION
+                                value: "us-east-1"            
                         ttyEnabled: true
                         workingDir: "/home/jenkins/agent"
 
