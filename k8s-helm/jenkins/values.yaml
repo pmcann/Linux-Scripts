@@ -106,12 +106,10 @@ controller:
                         shell: "/busybox/sh"                            # lets Jenkins `sh` work in this container
                         envVars:
                           envVars:
-                            - envVar:
-                                key: DOCKER_CONFIG
-                                value: "/kaniko/.docker"
-                            - envVar:
-                                key: AWS_REGION
-                                value: "us-east-1"            
+                            - key: DOCKER_CONFIG
+                              value: "/kaniko/.docker"
+                            - key: AWS_REGION
+                              value: "us-east-1"            
                         ttyEnabled: true
                         workingDir: "/home/jenkins/agent"
 
