@@ -104,7 +104,7 @@ controller:
                         command: "/busybox/sh"
                         args: "-c tail -f /dev/null"                    # keep sidecar alive for `container('kaniko'){ sh ... }`
                         shell: "/busybox/sh"                            # lets Jenkins `sh` work in this container
-                        env:
+                        envVars:
                           - name: DOCKER_CONFIG
                             value: /kaniko/.docker                      # where config.json will be mounted
                         ttyEnabled: true
