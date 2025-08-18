@@ -1,16 +1,28 @@
 jenkins:
   systemMessage: "Managed via Configuration-as-Code"
 
-securityRealm:
-  local:
-    allowsSignup: false
-    users:
-      - id: "admin"
-        password: "${JENKINS_ADMIN_PASSWORD}"
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "admin"
+          password: "${JENKINS_ADMIN_PASSWORD}"
 
-authorizationStrategy:
-  loggedInUsersCanDoAnything:
-    allowAnonymousRead: false
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+unclassified:
+  location:
+    url: "https://rationally-above-sheep.ngrok-free.app/"  # trailing slash is fine
+  jobDsl:
+    scriptSecurity: false
+  gitHubConfiguration:                     # modern GitHub endpoint config
+    endpoints:
+      - name: "github"
+        apiUri: "https://api.github.com"
+        manageHooks: false                 # set true only if you want Jenkins to auto-create webhooks
+        credentialsId: "github-token"      # optional for API calls
 
 credentials:
   system:
@@ -18,26 +30,13 @@ credentials:
       - credentials:
           - string:
               id: "github-token"
-              secret: "${GITHUB_TOKEN}"
+              secret: "${GITHUB_TOKEN}"    # <-- map this env var via Helm to your jenkins-github secret (key: pat)
               description: "GitHub Personal Access Token"
           - usernamePassword:
               id: "ecr-creds"
               username: "AWS"
-              password: "${ECR_PASSWORD}"
+              password: "${ECR_PASSWORD}"  # <-- map this env var via Helm to jenkins-ecr secret (key: password)
               description: "ECR login token"
-          - string:
-              id: "github-webhook-secret"
-              secret: "${GITHUB_WEBHOOK_SECRET}"
-              description: "GitHub webhook shared secret"
-
-unclassified:
-  location:
-    url: "https://rationally-above-sheep.ngrok-free.app"
-  jobDsl:
-    scriptSecurity: false
-  githubPluginConfig:
-    hookSecretConfig:
-      credentialsId: "github-webhook-secret"
 
 jobs:
   - script: |
@@ -62,7 +61,7 @@ jobs:
         }
         factory { workflowBranchProjectFactory { scriptPath('Jenkinsfile') } }
         orphanedItemStrategy { discardOldItems { numToKeep(10) } }
-        triggers { periodicFolderTrigger { interval('1d') } }    // keep daily as a safety net
+        triggers { periodicFolderTrigger { interval('1d') } }     // daily scan as safety net
       }
 
       multibranchPipelineJob('tripfinder-frontend') {
