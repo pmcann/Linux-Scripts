@@ -65,8 +65,6 @@ controller:
             endpoints:
               - name: "github"
                 apiUri: "https://api.github.com"
-                manageHooks: false
-                credentialsId: "github-token"
 
         credentials:
           system:
