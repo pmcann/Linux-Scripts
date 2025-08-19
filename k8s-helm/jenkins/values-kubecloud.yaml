@@ -28,12 +28,7 @@ controller:
     userKey: jenkins-admin-user
     passwordKey: jenkins-admin-password
 
-# Keep for clarity; doesn’t change storage but mirrors intent
-persistence:
-  enabled: true
-  existingClaim: jenkins
-
-  `installPlugins:
+  installPlugins:
     - configuration-as-code
     - job-dsl
     - workflow-aggregator
@@ -136,8 +131,7 @@ persistence:
                 orphanedItemStrategy { discardOldItems { numToKeep(10) } }
                 triggers { periodicFolderTrigger { interval('1d') } }
 
-
-
-
-
+persistence:
+  enabled: true
+  existingClaim: jenkins
 
