@@ -100,8 +100,7 @@ controller:
                   }
                 }
                 factory { workflowBranchProjectFactory { scriptPath('Jenkinsfile') } }
-                orphanedItemStrategy { discardOldItems { numToKeep(10) } }
-                triggers { periodicFolderTrigger { interval('1d') } }
+                orphanedItemStrategy { discardOldItems { numToKeep(10) } }          
               }
 
               multibranchPipelineJob('tripfinder-frontend') {
