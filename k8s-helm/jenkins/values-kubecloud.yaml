@@ -33,3 +33,111 @@ persistence:
   enabled: true
   existingClaim: jenkins
 
+  `installPlugins:
+    - configuration-as-code
+    - job-dsl
+    - workflow-aggregator
+    - git
+    - github
+    - github-branch-source
+    - branch-api
+    - scm-api
+    - kubernetes
+
+  JCasC:
+    enabled: true
+    configScripts:
+      casc: |-
+        # PASTE THE ENTIRE CONTENTS OF jenkins-casc.yaml BELOW THIS LINE
+        jenkins:
+          systemMessage: "Managed via Configuration-as-Code"
+          securityRealm:
+            local:
+              allowsSignup: false
+              users:
+                - id: "admin"
+                  password: "${JENKINS_ADMIN_PASSWORD}"
+          authorizationStrategy:
+            loggedInUsersCanDoAnything:
+              allowAnonymousRead: false
+
+        unclassified:
+          location:
+            url: "https://rationally-above-sheep.ngrok-free.app/"
+          jobDsl:
+            scriptSecurity: false
+          gitHubConfiguration:
+            endpoints:
+              - name: "github"
+                apiUri: "https://api.github.com"
+                manageHooks: false
+                credentialsId: "github-token"
+
+        credentials:
+          system:
+            domainCredentials:
+              - credentials:
+                  - string:
+                      id: "github-token"
+                      secret: "${GITHUB_TOKEN}"
+                      description: "GitHub Personal Access Token"
+                  - usernamePassword:
+                      id: "ecr-creds"
+                      username: "AWS"
+                      password: "${ECR_PASSWORD}"
+                      description: "ECR login token"
+
+        jobs:
+          - script: |
+              multibranchPipelineJob('tripfinder-backend') {
+                displayName('tripfinder-backend')
+                branchSources {
+                  branchSource {
+                    source {
+                      github {
+                        id('tripfinder-backend-src')
+                        repoOwner('pmcann')
+                        repository('tripfinder-backend')
+                        credentialsId('github-token')
+                        configuredByUrl(false)
+                        traits {
+                          gitHubBranchDiscovery { strategyId(1) }
+                          gitHubPullRequestDiscovery { strategyId(1) }
+                        }
+                      }
+                    }
+                  }
+                }
+                factory { workflowBranchProjectFactory { scriptPath('Jenkinsfile') } }
+                orphanedItemStrategy { discardOldItems { numToKeep(10) } }
+                triggers { periodicFolderTrigger { interval('1d') } }
+              }
+
+              multibranchPipelineJob('tripfinder-frontend') {
+                displayName('tripfinder-frontend')
+                branchSources {
+                  branchSource {
+                    source {
+                      github {
+                        id('tripfinder-frontend-src')
+                        repoOwner('pmcann')
+                        repository('tripfinder-frontend')
+                        credentialsId('github-token')
+                        configuredByUrl(false)
+                        traits {
+                          gitHubBranchDiscovery { strategyId(1) }
+                          gitHubPullRequestDiscovery { strategyId(1) }
+                        }
+                      }
+                    }
+                  }
+                }
+                factory { workflowBranchProjectFactory { scriptPath('Jenkinsfile') } }
+                orphanedItemStrategy { discardOldItems { numToKeep(10) } }
+                triggers { periodicFolderTrigger { interval('1d') } }
+
+
+
+
+
+
