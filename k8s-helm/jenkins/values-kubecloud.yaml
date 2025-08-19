@@ -59,8 +59,6 @@ controller:
         unclassified:
           location:
             url: "https://rationally-above-sheep.ngrok-free.app/"
-          jobDsl:
-            scriptSecurity: false
           gitHubConfiguration:
             endpoints:
               - name: "github"
