@@ -77,53 +77,6 @@ controller:
                       username: "AWS"
                       password: "${ECR_PASSWORD}"
                       description: "ECR login token"
-
-        jobs:
-          - script: |
-              multibranchPipelineJob('tripfinder-backend') {
-                displayName('tripfinder-backend')
-                branchSources {
-                  branchSource {
-                    source {
-                      github {
-                        id('tripfinder-backend-src')
-                        repoOwner('pmcann')
-                        repository('tripfinder-backend')
-                        credentialsId('github-token')
-                        configuredByUrl(false)
-                        traits {
-                          gitHubBranchDiscovery { strategyId(1) }
-                          gitHubPullRequestDiscovery { strategyId(1) }
-                        }
-                      }
-                    }
-                  }
-                }
-                factory { workflowBranchProjectFactory { scriptPath('Jenkinsfile') } }
-                orphanedItemStrategy { discardOldItems { numToKeep(10) } }          
-              }
-
-              multibranchPipelineJob('tripfinder-frontend') {
-                displayName('tripfinder-frontend')
-                branchSources {
-                  branchSource {
-                    source {
-                      github {
-                        id('tripfinder-frontend-src')
-                        repoOwner('pmcann')
-                        repository('tripfinder-frontend')
-                        credentialsId('github-token')
-                        configuredByUrl(false)
-                        traits {
-                          gitHubBranchDiscovery { strategyId(1) }
-                          gitHubPullRequestDiscovery { strategyId(1) }
-                        }
-                      }
-                    }
-                  }
-                }
-                factory { workflowBranchProjectFactory { scriptPath('Jenkinsfile') } }
-
 persistence:
   enabled: true
   existingClaim: jenkins
