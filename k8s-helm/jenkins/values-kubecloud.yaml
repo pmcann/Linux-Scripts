@@ -73,6 +73,11 @@ controller:
                       username: "pmcann"
                       password: "${GITHUB_TOKEN}"
                       description: "Github login token"
+                  - usernamePassword:
+                      id: "ecr-creds"
+                      username: "pmcann"
+                      password: "${ECR_PASSWORD}"
+                      description: "ECR login token"                      
 persistence:
   enabled: true
   existingClaim: jenkins
