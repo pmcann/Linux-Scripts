@@ -134,16 +134,26 @@ controller:
           system:
             domainCredentials:
               - credentials:
-                  - string:
+                  # Primary GitHub token (for Git over HTTPS)
+                  - usernamePassword:
                       id: "github-token"
-                      secret: "${GITHUB_TOKEN}"
-                      description: "GitHub Personal Access Token"
+                      username: "pmcann"
+                      password: "${GITHUB_TOKEN}"
+                      description: "GitHub login token (primary)"
+
+                  # Secondary GitHub token (new ghp_…)
+                  - usernamePassword:
+                      id: "github-token-ghp"
+                      username: "pmcann"
+                      password: "${GITHUB_TOKEN_GHP}"
+                      description: "GitHub login token (secondary GHP)"
+
+                  # ECR: username must be AWS
                   - usernamePassword:
                       id: "ecr-creds"
                       username: "AWS"
                       password: "${ECR_PASSWORD}"
                       description: "ECR login token"
-
         unclassified:
           location:
             url: "http://jenkins.jenkins.svc.cluster.local:8080"
