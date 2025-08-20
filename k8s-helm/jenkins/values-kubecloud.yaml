@@ -1,5 +1,5 @@
 controller:
-  # Environment wiring
+  # Environment wiring (tokens come from K8s Secrets created by your bootstrap)
   containerEnv:
     - name: JENKINS_ADMIN_PASSWORD
       valueFrom:
@@ -14,7 +14,7 @@ controller:
           name: jenkins-github
           key: pat
 
-    # Secondary GitHub token (new ghp_...), created by your bootstrap as 'jenkins-github-ghp'
+    # Secondary GitHub token (new ghp_...), created by bootstrap as 'jenkins-github-ghp'
     - name: GITHUB_TOKEN_GHP
       valueFrom:
         secretKeyRef:
@@ -26,6 +26,8 @@ controller:
         secretKeyRef:
           name: jenkins-ecr
           key: password
+
+    # Jenkins update center mirrors (optional, as you had them)
     - name: JENKINS_UC
       value: "https://updates.jenkins.io"
     - name: JENKINS_UC_DOWNLOAD
@@ -38,23 +40,12 @@ controller:
     userKey: jenkins-admin-user
     passwordKey: jenkins-admin-password
 
-  installPlugins:
-    - configuration-as-code
-    - job-dsl
-    - workflow-aggregator
-    - git
-    - github
-    - github-branch-source
-    - branch-api
-    - scm-api
-    - kubernetes
-
   JCasC:
     enabled: true
     configScripts:
       casc: |-
         jenkins:
-          systemMessage: "Managed via Configuration-as-Code"
+          systemMessage: "Managed via Configuration-as-Code (canonical: values-kubecloud.yaml)"
           securityRealm:
             local:
               allowsSignup: false
@@ -65,8 +56,81 @@ controller:
             loggedInUsersCanDoAnything:
               allowAnonymousRead: false
 
+          # ---- Kubernetes cloud (agent pods)
+          clouds:
+            - kubernetes:
+                name: "kubernetes"
+                serverUrl: "https://kubernetes.default.svc"
+                skipTlsVerify: true
+                namespace: "jenkins"
+                jenkinsUrl: "http://jenkins.jenkins.svc.cluster.local:8080"
+                jenkinsTunnel: "jenkins-agent.jenkins.svc.cluster.local:50000"
+                containerCapStr: "10"
+                templates:
+
+                  # base template for generic shell steps
+                  - name: "base"
+                    label: "k8s"
+                    serviceAccount: "jenkins"
+                    yamlMergeStrategy: "override"
+                    nodeUsageMode: "NORMAL"
+                    containers:
+                      - name: "jnlp"
+                        image: "jenkins/inbound-agent:jdk17"   # multi-arch
+                        ttyEnabled: true
+                        workingDir: "/home/jenkins/agent"
+                      - name: "busybox"
+                        image: "alpine:3.20"
+                        command: "cat"
+                        ttyEnabled: true
+                        workingDir: "/home/jenkins/agent"
+
+                  # kaniko template for container builds
+                  - name: "kaniko"
+                    label: "k8s-kaniko"
+                    serviceAccount: "jenkins"
+                    nodeUsageMode: "NORMAL"
+                    containers:
+                      - name: "jnlp"
+                        image: "jenkins/inbound-agent:jdk17"
+                        ttyEnabled: true
+                        workingDir: "/home/jenkins/agent"
+
+                      - name: "kaniko"
+                        image: "gcr.io/kaniko-project/executor:debug"   # has /busybox and /kaniko
+                        command: "/busybox/sh"
+                        args: "-c tail -f /dev/null"                    # keep sidecar alive for container('kaniko'){ sh ... }
+                        shell: "/busybox/sh"                            # lets Jenkins `sh` work in this container
+                        envVars:
+                          - envVar:
+                              key: DOCKER_CONFIG
+                              value: "/kaniko/.docker"
+                          - envVar:
+                              key: AWS_REGION
+                              value: "us-east-1"
+                        ttyEnabled: true
+                        workingDir: "/home/jenkins/agent"
+
+                    # Mount the short-lived ECR dockerconfig secret as /kaniko/.docker/config.json
+                    yaml: |
+                      spec:
+                        containers:
+                        - name: kaniko
+                          volumeMounts:
+                          - name: ecr-dockercfg
+                            mountPath: /kaniko/.docker
+                            readOnly: true
+                        volumes:
+                        - name: ecr-dockercfg
+                          secret:
+                            secretName: ecr-dockercfg
+                            items:
+                            - key: .dockerconfigjson
+                              path: config.json
+
         unclassified:
           location:
+            # External URL (you had ngrok). Change if you switch to ALB/Ingress later.
             url: "https://rationally-above-sheep.ngrok-free.app/"
           gitHubConfiguration:
             endpoints:
@@ -96,6 +160,7 @@ controller:
                       password: "${ECR_PASSWORD}"
                       description: "ECR login token"
 
+# Keep persistence here too (matches your other file; harmless if redundant)
 persistence:
   enabled: true
   existingClaim: jenkins
