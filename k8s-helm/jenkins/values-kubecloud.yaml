@@ -68,15 +68,17 @@ controller:
           system:
             domainCredentials:
               - credentials:
-                  - string:
+                  - usernamePassword:
                       id: "github-token"
-                      secret: "${GITHUB_TOKEN}"
-                      description: "GitHub Personal Access Token"
+                      username: "pmcann"
+                      password: "${GITHUB_TOKEN}"
+                      description: "Github login token"
                   - usernamePassword:
                       id: "ecr-creds"
-                      username: "AWS"
+                      username: "pmcann"
                       password: "${ECR_PASSWORD}"
                       description: "ECR login token"
+    
 persistence:
   enabled: true
   existingClaim: jenkins
