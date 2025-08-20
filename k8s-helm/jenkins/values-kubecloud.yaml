@@ -1,16 +1,26 @@
 controller:
-  # Environment wiring (no JCasC files here)
+  # Environment wiring
   containerEnv:
     - name: JENKINS_ADMIN_PASSWORD
       valueFrom:
         secretKeyRef:
           name: jenkins-admin-secret
           key: jenkins-admin-password
+
+    # Primary GitHub token (existing). If your secret key is 'pat', keep it.
     - name: GITHUB_TOKEN
       valueFrom:
         secretKeyRef:
           name: jenkins-github
           key: pat
+
+    # Secondary GitHub token (new ghp_...), created by your bootstrap as 'jenkins-github-ghp'
+    - name: GITHUB_TOKEN_GHP
+      valueFrom:
+        secretKeyRef:
+          name: jenkins-github-ghp
+          key: GITHUB_TOKEN_GHP
+
     - name: ECR_PASSWORD
       valueFrom:
         secretKeyRef:
@@ -43,7 +53,6 @@ controller:
     enabled: true
     configScripts:
       casc: |-
-        # PASTE THE ENTIRE CONTENTS OF jenkins-casc.yaml BELOW THIS LINE
         jenkins:
           systemMessage: "Managed via Configuration-as-Code"
           securityRealm:
@@ -68,16 +77,25 @@ controller:
           system:
             domainCredentials:
               - credentials:
+                  # Primary GitHub for HTTPS
                   - usernamePassword:
                       id: "github-token"
                       username: "pmcann"
                       password: "${GITHUB_TOKEN}"
-                      description: "Github login token"
+                      description: "GitHub login token (primary)"
+                  # Secondary GitHub (new, ghp_)
+                  - usernamePassword:
+                      id: "github-token-ghp"
+                      username: "pmcann"
+                      password: "${GITHUB_TOKEN_GHP}"
+                      description: "GitHub login token (secondary GHP)"
+                  # ECR (username must be AWS)
                   - usernamePassword:
                       id: "ecr-creds"
-                      username: "pmcann"
+                      username: "AWS"
                       password: "${ECR_PASSWORD}"
-                      description: "ECR login token"                      
+                      description: "ECR login token"
+
 persistence:
   enabled: true
   existingClaim: jenkins
