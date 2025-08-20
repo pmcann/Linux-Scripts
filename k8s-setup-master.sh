@@ -209,6 +209,16 @@ GITHUB_PAT="$(aws ssm get-parameter --with-decryption \
   --name /tripfinder/github/pat --query 'Parameter.Value' \
   --output text 2>/dev/null || echo 'replace-me')"
 
+GHP_PAT=$(aws ssm get-parameter \
+  --name "/tripfinder/github/token-ghp" \
+  --with-decryption \
+  --region us-east-1 \
+  --query 'Parameter.Value' --output text)
+
+kubectl -n jenkins delete secret jenkins-github-ghp 2>/dev/null || true
+kubectl -n jenkins create secret generic jenkins-github-ghp \
+  --from-literal=GITHUB_TOKEN_GHP="${GHP_PAT}"
+
 # ── Create Jenkins secrets (idempotent) ──────────────────────────────────────
 kubectl -n jenkins create secret generic jenkins-admin-secret \
   --from-literal=jenkins-admin-user=admin \
