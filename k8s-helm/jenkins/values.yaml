@@ -39,6 +39,9 @@ controller:
     - ansicolor
     - timestamper
     - matrix-auth
+    - pipeline-model-definition
+    - pipeline-model-extensions
+    - pipeline-model-api      
 
   # NOTE: No JCasC here. JCasC is defined only in values-kubecloud.yaml (Option B).
 
