@@ -42,6 +42,7 @@ controller:
 
   JCasC:
     enabled: true
+    defaultConfig: false   # <— IMPORTANT
     configScripts:
       casc: |-
         jenkins:
