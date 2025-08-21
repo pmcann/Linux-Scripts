@@ -1,15 +1,23 @@
 server:
   service:
-    type: ClusterIP
+    type: NodePort
+    nodePortHttp: 32011     # pick any free port in 30000-32767
+    nodePortHttps: 32444
+
+  # Optional: if the chart exposes both http/https, default is fine.
+  # servicePortHttp: 80
+  # servicePortHttps: 443
+
+# Disable ingress for now (no DNS). Re-enable later if you want.
+server:
   ingress:
-    enabled: true
-    annotations:
-      kubernetes.io/ingress.class: traefik
-    hosts:
-      - argocd.your-domain.com
+    enabled: false
+
 controller:
   metrics:
     enabled: true
+
 repoServer:
   metrics:
     enabled: true
+
