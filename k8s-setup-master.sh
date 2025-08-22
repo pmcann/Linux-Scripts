@@ -276,7 +276,10 @@ helm upgrade --install traefik traefik/traefik \
   --set ports.web.nodePort=32080 \
   --set ports.websecure.nodePort=32443 \
   --set ingressClass.enabled=true \
-  --set ingressClass.isDefaultClass=true 
+  --set ingressClass.isDefaultClass=true \
+  --reuse-values \
+  --set providers.kubernetesIngress.publishedService.enabled=true \
+  --set providers.kubernetesIngress.publishedService.path=traefik/traefik
 
 # --- AWS EBS CSI driver (no --wait) ---
 helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver || true
