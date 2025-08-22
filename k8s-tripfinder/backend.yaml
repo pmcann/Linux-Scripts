@@ -24,7 +24,7 @@ spec:
           - 1.1.1.1
       containers:
         - name: backend
-          image: 374965728115.dkr.ecr.us-east-1.amazonaws.com/tripfinder-backend:09fab2f
+          image: 374965728115.dkr.ecr.us-east-1.amazonaws.com/tripfinder-backend:a65754b
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
