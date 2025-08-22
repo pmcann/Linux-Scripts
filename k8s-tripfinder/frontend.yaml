@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: tripfinder-frontend
-          image: 374965728115.dkr.ecr.us-east-1.amazonaws.com/tripfinder-frontend:40ddd71
+          image: 374965728115.dkr.ecr.us-east-1.amazonaws.com/tripfinder-frontend:623ae33
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
