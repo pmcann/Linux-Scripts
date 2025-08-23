@@ -1,14 +1,9 @@
+# k8s-helm/argocd/values.yaml
 server:
   service:
     type: NodePort
-    # Fixed NodePorts (must be in 30000–32767 and allowed in your SG)
     nodePortHttp: 32011
     nodePortHttps: 32444
-    # Optional, but fine to keep explicit:
-    servicePortHttp: 80
-    servicePortHttps: 443
-
-  # Disable ingress for now (no DNS). Flip to true later if you use Traefik/Ingress.
   ingress:
     enabled: false
 
@@ -19,4 +14,25 @@ controller:
 repoServer:
   metrics:
     enabled: true
+
+# ⬇️ new: persist the Ingress health customization
+configs:
+  cm:
+    resource.customizations.health.networking.k8s.io_Ingress: |
+      hs = {}
+      local hasRules = obj.spec and obj.spec.rules and #obj.spec.rules > 0
+      local hasLB = obj.status and obj.status.loadBalancer and obj.status.loadBalancer.ingress and #obj.status.loadBalancer.ingress > 0
+      if hasLB then
+        hs.status = "Healthy"
+        hs.message = "LoadBalancer address present"
+        return hs
+      end
+      if hasRules then
+        hs.status = "Healthy"
+        hs.message = "NodePort/Traefik: ignoring empty .status.loadBalancer"
+        return hs
+      end
+      hs.status = "Progressing"
+      hs.message = "Waiting for rules or LoadBalancer"
+      return hs
 
