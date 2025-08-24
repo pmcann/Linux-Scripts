@@ -31,7 +31,12 @@ deploymentMode: SingleBinary
 
 singleBinary:
   replicas: 1
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClassName: ebs-gp3
 
+# Make sure the scalable components are OFF
 read:
   replicas: 0
 
@@ -40,4 +45,11 @@ write:
 
 backend:
   replicas: 0
+
+# Turn off caches used by scalable mode
+chunksCache:
+  enabled: false
+
+resultsCache:
+  enabled: false
     
