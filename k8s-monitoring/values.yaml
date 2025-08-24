@@ -1,9 +1,19 @@
 grafana:
-  service:
-    type: NodePort
-    nodePort: 32001
   adminPassword: "prom-operator"
   defaultDashboardsEnabled: true
+  service:
+    type: NodePort
+    port: 80
+    targetPort: 3000
+    nodePort: 32001
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      access: proxy
+      url: http://loki.monitoring.svc.cluster.local:3100
+      isDefault: false
+      jsonData:
+        maxLines: 1000
 
 prometheus:
   service:
@@ -13,13 +23,3 @@ prometheus:
     serviceMonitorSelectorNilUsesHelmValues: false
     podMonitorSelectorNilUsesHelmValues: false
 
-grafana:
-  additionalDataSources:
-    - name: Loki
-      type: loki
-      access: proxy
-      url: http://loki.monitoring.svc.cluster.local:3100
-      isDefault: false
-      jsonData:
-        maxLines: 1000
-    
