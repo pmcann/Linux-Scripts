@@ -432,6 +432,21 @@ else
   echo "[WARN] Loki values not found at $VALUES; skipping Loki install." | tee -a /var/log/k8s-bootstrap.log
 fi
 
+# --- Install Promtail (log shipper) ---
+echo "[BOOTSTRAP] Installing Promtail..." | tee -a /var/log/k8s-bootstrap.log
+helm repo add grafana https://grafana.github.io/helm-charts >> /var/log/k8s-bootstrap.log 2>&1 || true
+helm repo update >> /var/log/k8s-bootstrap.log 2>&1
+
+PROMTAIL_VALUES="$REPO_DIR/k8s-helm/monitoring/promtail-values.yaml"
+if [[ -f "$PROMTAIL_VALUES" ]]; then
+  helm upgrade --install promtail grafana/promtail \
+    -n monitoring \
+    -f "$PROMTAIL_VALUES" \
+    --create-namespace >> /var/log/k8s-bootstrap.log 2>&1
+  echo "[BOOTSTRAP] Promtail install complete (monitoring ns)." | tee -a /var/log/k8s-bootstrap.log
+else
+  echo "[WARN] Promtail values not found at $PROMTAIL_VALUES; skipping Promtail install." | tee -a /var/log/k8s-bootstrap.log
+fi
 
 
 # ── Install Argo CD ────────────────────────────────────────────────────────────
