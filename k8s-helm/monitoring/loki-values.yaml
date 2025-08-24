@@ -25,3 +25,19 @@ loki:
           period: 24h
   limits_config:
     retention_period: 168h       # 7 days
+
+# Force SingleBinary mode and disable scalable targets
+deploymentMode: SingleBinary
+
+singleBinary:
+  replicas: 1
+
+read:
+  replicas: 0
+
+write:
+  replicas: 0
+
+backend:
+  replicas: 0
+    
