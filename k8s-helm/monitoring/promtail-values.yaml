@@ -1,0 +1,12 @@
+# Minimal Promtail config: ship K8s container logs to Loki
+config:
+  clients:
+    - url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+
+  # Keep parsing simple but useful
+  snippets:
+    pipelineStages:
+      - cri: {}   # parse CRI format into JSON (timestamp, stream, log)
+
+# DaemonSet runs on each node and tails /var/log/containers/*
+

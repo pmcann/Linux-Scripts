@@ -415,6 +415,25 @@ helm upgrade --install prometheus-stack prometheus-community/kube-prometheus-sta
 kubectl apply -f "$REPO_DIR/k8s-monitoring/service-monitor-traefik.yaml" -n monitoring
 kubectl apply -f "$REPO_DIR/k8s-monitoring/service-monitor-backend.yaml" -n monitoring
 
+
+# --- Install Loki (logs backend) ---
+echo "[BOOTSTRAP] Installing Loki..." | tee -a /var/log/k8s-bootstrap.log
+helm repo add grafana https://grafana.github.io/helm-charts >> /var/log/k8s-bootstrap.log 2>&1 || true
+helm repo update >> /var/log/k8s-bootstrap.log 2>&1
+
+VALUES="$REPO_DIR/k8s-helm/monitoring/loki-values.yaml"
+if [[ -f "$VALUES" ]]; then
+  helm upgrade --install loki grafana/loki \
+    -n monitoring \
+    -f "$VALUES" \
+    --create-namespace >> /var/log/k8s-bootstrap.log 2>&1
+  echo "[BOOTSTRAP] Loki install complete (monitoring ns)." | tee -a /var/log/k8s-bootstrap.log
+else
+  echo "[WARN] Loki values not found at $VALUES; skipping Loki install." | tee -a /var/log/k8s-bootstrap.log
+fi
+
+
+
 # ── Install Argo CD ────────────────────────────────────────────────────────────
 echo "[BOOTSTRAP] Installing Argo CD…"
 helm upgrade --install argo-cd argo/argo-cd \
