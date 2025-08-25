@@ -1,19 +1,12 @@
-# Loki single-node, local filesystem storage, 7-day retention
+# Loki for small, ephemeral clusters — single-binary, NO PV, 7-day retention (best-effort)
 deploymentMode: SingleBinary
-
-singleBinary:
-  replicas: 1
-  persistence:
-    enabled: true
-    size: 5Gi
-    storageClassName: ebs-gp3   # your EBS CSI StorageClass
 
 loki:
   auth_enabled: false
   commonConfig:
-    replication_factor: 1        # single replica
+    replication_factor: 1
   storage:
-    type: filesystem             # simple local storage (EBS PVC)
+    type: filesystem
   schemaConfig:
     configs:
       - from: "2024-04-01"
@@ -24,32 +17,35 @@ loki:
           prefix: loki_index_
           period: 24h
   limits_config:
-    retention_period: 168h       # 7 days
-
-# Force SingleBinary mode and disable scalable targets
-deploymentMode: SingleBinary
+    retention_period: 168h   # 7 days (only as long as the pod lives)
 
 singleBinary:
   replicas: 1
+  # **No persistent volume** — keep data on container’s ephemeral storage
   persistence:
-    enabled: true
-    size: 5Gi
-    storageClassName: ebs-gp3
+    enabled: false
 
-# Make sure the scalable components are OFF
+# Ensure scalable topology is OFF
 read:
   replicas: 0
-
 write:
   replicas: 0
-
 backend:
   replicas: 0
 
 # Turn off caches used by scalable mode
 chunksCache:
   enabled: false
-
 resultsCache:
   enabled: false
-    
+
+# Keep these on (optional but handy)
+gateway:
+  enabled: true
+lokiCanary:
+  enabled: true
+
+# Optional: expose Loki metrics to your Prom stack
+serviceMonitor:
+  enabled: true
+
