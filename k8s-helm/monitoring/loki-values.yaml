@@ -24,6 +24,13 @@ singleBinary:
   # **No persistent volume** — keep data on container’s ephemeral storage
   persistence:
     enabled: false
+  # Add these lines to explicitly mount a writable, temporary directory
+  extraVolumes:
+    - name: loki-data
+      emptyDir: {}
+  extraVolumeMounts:
+    - name: loki-data
+      mountPath: /var/loki
 
 # Ensure scalable topology is OFF
 read:
