@@ -1,11 +1,24 @@
 grafana:
   adminPassword: "prom-operator"
+
+  # Keep the built-in dashboards if you like
   defaultDashboardsEnabled: true
+
+  # Persist Grafana data (dashboards, users, etc.)
+  persistence:
+    enabled: true
+    type: pvc
+    size: 5Gi
+    # storageClassName: gp2   # <- uncomment & set to your cluster's StorageClass
+
+  # How you expose Grafana
   service:
     type: NodePort
     port: 80
     targetPort: 3000
     nodePort: 32001
+
+  # Loki datasource (you already had this)
   additionalDataSources:
     - name: Loki
       type: loki
@@ -15,11 +28,59 @@ grafana:
       jsonData:
         maxLines: 1000
 
+  # Turn on the dashboards sidecar so ConfigMaps are auto-loaded
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      searchNamespace: ALL
+
+  # Dashboards-as-code (Helm creates ConfigMaps that the sidecar loads)
+  dashboards:
+    default:
+      chaos-testing.json: |
+        {
+          "schemaVersion": 39,
+          "title": "Chaos Testing",
+          "editable": true,
+          "tags": ["tripfinder", "chaos"],
+          "time": { "from": "now-30m", "to": "now" },
+          "panels": [
+            {
+              "type": "timeseries",
+              "title": "Tripfinder Backend Restarts (rate)",
+              "gridPos": { "x": 0, "y": 0, "w": 24, "h": 8 },
+              "targets": [
+                {
+                  "expr": "rate(kube_pod_container_status_restarts_total{namespace=\"default\",pod=~\"tripfinder-backend.*\"}[5m])",
+                  "legendFormat": "{{pod}}",
+                  "refId": "A",
+                  "datasource": { "type": "prometheus", "uid": "prometheus", "name": "Prometheus" }
+                }
+              ]
+            },
+            {
+              "type": "logs",
+              "title": "Backend Logs (Loki)",
+              "gridPos": { "x": 0, "y": 8, "w": 24, "h": 10 },
+              "options": { "showTime": true, "wrapLogMessage": true },
+              "targets": [
+                {
+                  "expr": "{app=\"tripfinder-backend\"}",
+                  "refId": "B",
+                  "datasource": { "type": "loki", "uid": "loki", "name": "Loki" }
+                }
+              ]
+            }
+          ]
+        }
+
 prometheus:
   service:
     type: NodePort
     nodePort: 32002
   prometheusSpec:
+    # Allow discovery of your custom ServiceMonitors/PodMonitors
     serviceMonitorSelectorNilUsesHelmValues: false
     podMonitorSelectorNilUsesHelmValues: false
 
