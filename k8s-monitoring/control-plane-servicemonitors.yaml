@@ -1,0 +1,47 @@
+# ServiceMonitor for kube-scheduler
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kube-scheduler
+  namespace: monitoring
+  labels:
+    release: prometheus-stack   # <- must match your kube-prometheus-stack release label
+spec:
+  namespaceSelector:
+    matchNames: ["kube-system"]
+  selector:
+    matchLabels:
+      k8s-app: kube-scheduler
+  endpoints:
+    - port: https-metrics
+      scheme: https
+      interval: 30s
+      tlsConfig:
+        caFile: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        insecureSkipVerify: false
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+---
+# ServiceMonitor for kube-controller-manager
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kube-controller-manager
+  namespace: monitoring
+  labels:
+    release: prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames: ["kube-system"]
+  selector:
+    matchLabels:
+      k8s-app: kube-controller-manager
+  endpoints:
+    - port: https-metrics
+      scheme: https
+      interval: 30s
+      tlsConfig:
+        caFile: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        insecureSkipVerify: false
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+

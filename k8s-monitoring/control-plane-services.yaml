@@ -1,0 +1,35 @@
+# kube-system/kube-scheduler service (exposes 10259)
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-scheduler
+  namespace: kube-system
+  labels:
+    k8s-app: kube-scheduler
+spec:
+  selector:
+    component: kube-scheduler
+  ports:
+    - name: https-metrics
+      port: 10259
+      targetPort: 10259
+  clusterIP: None  # headless is fine (optional)
+
+---
+# kube-system/kube-controller-manager service (exposes 10257)
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-controller-manager
+  namespace: kube-system
+  labels:
+    k8s-app: kube-controller-manager
+spec:
+  selector:
+    component: kube-controller-manager
+  ports:
+    - name: https-metrics
+      port: 10257
+      targetPort: 10257
+  clusterIP: None
+
