@@ -1,0 +1,92 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: '>=0.0.0'
+      helm:
+        skipCrds: false
+        valueFiles: []
+        values: |
+          grafana:
+            adminPassword: "prom-operator"
+            defaultDashboardsEnabled: true
+            service:
+              type: NodePort
+              port: 80
+              targetPort: 3000
+              nodePort: 32001
+            additionalDataSources:
+              - name: Loki
+                type: loki
+                access: proxy
+                url: http://loki.monitoring.svc.cluster.local:3100
+                isDefault: false
+                jsonData:
+                  maxLines: 1000
+            sidecar:
+              dashboards:
+                enabled: true
+                label: grafana_dashboard
+                searchNamespace: ALL
+            dashboards:
+              default:
+                chaos-testing:
+                  json: |
+                    {
+                      "schemaVersion": 39,
+                      "title": "Chaos Testing",
+                      "editable": true,
+                      "tags": ["tripfinder", "chaos"],
+                      "time": { "from": "now-30m", "to": "now" },
+                      "panels": [
+                        {
+                          "type": "timeseries",
+                          "title": "Tripfinder Backend Restarts (rate)",
+                          "gridPos": { "x": 0, "y": 0, "w": 24, "h": 8 },
+                          "targets": [
+                            {
+                              "expr": "rate(kube_pod_container_status_restarts_total{namespace=\"default\",pod=~\"tripfinder-backend.*\"}[5m])",
+                              "legendFormat": "{{pod}}",
+                              "refId": "A",
+                              "datasource": { "type": "prometheus", "uid": "prometheus", "name": "Prometheus" }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "logs",
+                          "title": "Backend Logs (Loki)",
+                          "gridPos": { "x": 0, "y": 8, "w": 24, "h": 10 },
+                          "options": { "showTime": true, "wrapLogMessage": true },
+                          "targets": [
+                            {
+                              "expr": "{app=\"tripfinder-backend\"}",
+                              "refId": "B",
+                              "datasource": { "type": "loki", "uid": "loki", "name": "Loki" }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+
+          prometheus:
+            service:
+              type: NodePort
+              nodePort: 32002
+            prometheusSpec:
+              serviceMonitorSelectorNilUsesHelmValues: false
+              podMonitorSelectorNilUsesHelmValues: false
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

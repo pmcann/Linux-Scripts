@@ -7,7 +7,7 @@ spec:
   project: default
   destination:
     server: https://kubernetes.default.svc
-    namespace: monitoring   # used only for namespaceless manifests; per-object namespaces are respected
+    namespace: monitoring
   source:
     repoURL: https://github.com/pmcann/Linux-Scripts.git
     targetRevision: main
@@ -20,4 +20,3 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
-
