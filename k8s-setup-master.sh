@@ -404,18 +404,6 @@ EOF
 # ── Then apply the Ingress (avoids 404s while pods start) ─────────────────────
 # kubectl apply -f "$REPO_DIR/k8s-tripfinder/tripfinder-ingress.yaml"
 
-# ── Install Prometheus + Grafana ───────────────────────────────────────────────
-echo "[BOOTSTRAP] Installing Prometheus + Grafana stack…"
-kubectl get namespace monitoring >/dev/null 2>&1 || kubectl create namespace monitoring
-helm upgrade --install prometheus-stack prometheus-community/kube-prometheus-stack \
-  --namespace monitoring \
-  -f "$REPO_DIR/k8s-monitoring/values.yaml"
-
-
-kubectl apply -f "$REPO_DIR/k8s-monitoring/service-monitor-traefik.yaml" -n monitoring
-kubectl apply -f "$REPO_DIR/k8s-monitoring/service-monitor-backend.yaml" -n monitoring
-
-
 # --- Install Loki (logs backend) ---
 echo "[BOOTSTRAP] Installing Loki..." | tee -a /var/log/k8s-bootstrap.log
 helm repo add grafana https://grafana.github.io/helm-charts >> /var/log/k8s-bootstrap.log 2>&1 || true
