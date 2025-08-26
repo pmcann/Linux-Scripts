@@ -467,13 +467,11 @@ done
 # Controller ready => sync will happen immediately (don’t fail the whole script if it’s slow)
 kubectl -n argocd rollout status deployment/argocd-application-controller --timeout=300s || true
 
-if [ -f "$APP_FILE" ]; then
-  echo "[BOOTSTRAP] Applying Argo CD Application: $APP_FILE"
-  kubectl -n argocd apply -f "$APP_FILE"
-else
-  echo "[BOOTSTRAP][WARN] $APP_FILE not found; skipping Argo Application bootstrap."
-fi
-
+# Apply Argo CD Application manifests (Tripfinder, Monitoring stack, Monitoring manifests)
+echo "[BOOTSTRAP] Applying Argo CD Applications…"
+kubectl -n argocd apply -f "$REPO_DIR/k8s-helm/argocd/tripfinder-app.yaml"
+kubectl -n argocd apply -f "$REPO_DIR/k8s-helm/argocd/monitoring-app.yaml"
+kubectl -n argocd apply -f "$REPO_DIR/k8s-helm/argocd/monitoring-manifests-app.yaml"
 
 echo "[BOOTSTRAP] Jenkins, Argo CD, Traefik, and Monitoring installed."
 
