@@ -420,22 +420,21 @@ else
   echo "[WARN] Loki values not found at $VALUES; skipping Loki install." | tee -a /var/log/k8s-bootstrap.log
 fi
 
-# --- Install Promtail (log shipper) ---
-echo "[BOOTSTRAP] Installing Promtail..." | tee -a /var/log/k8s-bootstrap.log
+# --- Install Alloy (OTel-based log collector; replaces Promtail) ---
+echo "[BOOTSTRAP] Installing Grafana Alloy..." | tee -a /var/log/k8s-bootstrap.log
 helm repo add grafana https://grafana.github.io/helm-charts >> /var/log/k8s-bootstrap.log 2>&1 || true
 helm repo update >> /var/log/k8s-bootstrap.log 2>&1
 
-PROMTAIL_VALUES="$REPO_DIR/k8s-helm/monitoring/promtail-values.yaml"
-if [[ -f "$PROMTAIL_VALUES" ]]; then
-  helm upgrade --install promtail grafana/promtail \
+ALLOY_VALUES="$REPO_DIR/k8s-helm/monitoring/alloy-values.yaml"
+if [[ -f "$ALLOY_VALUES" ]]; then
+  helm upgrade --install alloy grafana/alloy \
     -n monitoring \
-    -f "$PROMTAIL_VALUES" \
+    -f "$ALLOY_VALUES" \
     --create-namespace >> /var/log/k8s-bootstrap.log 2>&1
-  echo "[BOOTSTRAP] Promtail install complete (monitoring ns)." | tee -a /var/log/k8s-bootstrap.log
+  echo "[BOOTSTRAP] Alloy install complete (monitoring ns)." | tee -a /var/log/k8s-bootstrap.log
 else
-  echo "[WARN] Promtail values not found at $PROMTAIL_VALUES; skipping Promtail install." | tee -a /var/log/k8s-bootstrap.log
+  echo "[WARN] Alloy values not found at $ALLOY_VALUES; skipping Alloy install." | tee -a /var/log/k8s-bootstrap.log
 fi
-
 
 # ── Install Argo CD ────────────────────────────────────────────────────────────
 echo "[BOOTSTRAP] Installing Argo CD…"
