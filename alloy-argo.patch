@@ -1,0 +1,53 @@
+--- a/k8s-setup-master.sh
++++ b/k8s-setup-master.sh
+@@ -1,12 +1,13 @@
+ # --- Install Alloy (OTel-based log collector; replaces Promtail) ---
+ echo "[BOOTSTRAP] Installing Grafana Alloy..." | tee -a /var/log/k8s-bootstrap.log
+ helm repo add grafana https://grafana.github.io/helm-charts >> /var/log/k8s-bootstrap.log 2>&1 || true
+ helm repo update >> /var/log/k8s-bootstrap.log 2>&1
+ 
+ ALLOY_VALUES="$REPO_DIR/k8s-helm/monitoring/alloy-values.yaml"
+ if [[ -f "$ALLOY_VALUES" ]]; then
+   helm upgrade --install alloy grafana/alloy \
+     -n monitoring \
+     -f "$ALLOY_VALUES" \
++    --set serviceMonitor.enabled=false \
+     --create-namespace >> /var/log/k8s-bootstrap.log 2>&1
+   echo "[BOOTSTRAP] Alloy install complete (monitoring ns)." | tee -a /var/log/k8s-bootstrap.log
+ else
+   echo "[WARN] Alloy values not found at $ALLOY_VALUES; skipping Alloy install." | tee -a /var/log/k8s-bootstrap.log
+ fi
+ 
+@@ -14,7 +15,8 @@
+ # ── Install Argo CD ────────────────────────────────────────────────────────────
+ echo "[BOOTSTRAP] Installing Argo CD…"
++kubectl get ns argocd >/dev/null 2>&1 || kubectl create ns argocd
+ helm upgrade --install argo-cd argo/argo-cd \
+   --namespace argocd \
+   -f "$REPO_DIR/k8s-helm/argocd/values.yaml"
+ 
+ # --- Bootstrap Argo CD Application (Tripfinder) ---
+@@ -31,6 +33,23 @@
+ echo "[BOOTSTRAP] Applying Argo CD Applications…"
+ kubectl -n argocd apply -f "$REPO_DIR/k8s-helm/argocd/tripfinder-app.yaml"
+ kubectl -n argocd apply -f "$REPO_DIR/k8s-helm/argocd/monitoring-app.yaml"
++kubectl -n argocd apply -f "$REPO_DIR/k8s-helm/argocd/monitoring-manifests-app.yaml"
+ 
+ echo "[BOOTSTRAP] Jenkins, Argo CD, Traefik, and Monitoring installed."
++
++# --- Enable Alloy ServiceMonitor after Prometheus CRDs exist ---
++echo "[BOOTSTRAP] Waiting for Prometheus CRDs (ServiceMonitor)…"
++until kubectl get crd servicemonitors.monitoring.coreos.com >/dev/null 2>&1; do
++  sleep 5
++done
++# Optional: wait for Prometheus Operator to speed up SM reconciliation
++kubectl -n monitoring rollout status deploy/prometheus-stack-kube-prom-operator --timeout=300s || true
++
++echo "[BOOTSTRAP] Enabling Alloy ServiceMonitor…"
++helm upgrade --install alloy grafana/alloy \
++  -n monitoring \
++  -f "$REPO_DIR/k8s-helm/monitoring/alloy-values.yaml" \
++  --set serviceMonitor.enabled=true \
++  --create-namespace >> /var/log/k8s-bootstrap.log 2>&1 || {
++  echo "[WARN] Alloy ServiceMonitor enable step failed (continuing)";
++}
