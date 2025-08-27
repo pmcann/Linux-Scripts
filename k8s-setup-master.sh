@@ -427,10 +427,11 @@ helm repo update >> /var/log/k8s-bootstrap.log 2>&1
 
 ALLOY_VALUES="$REPO_DIR/k8s-helm/monitoring/alloy-values.yaml"
 if [[ -f "$ALLOY_VALUES" ]]; then
+  # Install Alloy first with ServiceMonitor disabled (Prometheus CRDs may not exist yet)
   helm upgrade --install alloy grafana/alloy \
     -n monitoring \
     -f "$ALLOY_VALUES" \
-    --set serviceMonitor.enabled=false \   # <— temporarily disable until CRD exists
+    --set serviceMonitor.enabled=false \
     --create-namespace >> /var/log/k8s-bootstrap.log 2>&1
   echo "[BOOTSTRAP] Alloy install complete (monitoring ns)." | tee -a /var/log/k8s-bootstrap.log
 else
@@ -439,35 +440,29 @@ fi
 
 # ── Install Argo CD ────────────────────────────────────────────────────────────
 echo "[BOOTSTRAP] Installing Argo CD…"
+kubectl get ns argocd >/dev/null 2>&1 || kubectl create ns argocd
 helm upgrade --install argo-cd argo/argo-cd \
   --namespace argocd \
-  -f "$REPO_DIR/k8s-helm/argocd/values.yaml" 
+  -f "$REPO_DIR/k8s-helm/argocd/values.yaml"
 
-
-# --- Bootstrap Argo CD Application (Tripfinder) ---
-APP_FILE="$REPO_DIR/k8s-helm/argocd/tripfinder-app.yaml"
-
+# --- Apply Argo CD Applications (Tripfinder + Monitoring stack + Manifests) ---
 echo "[BOOTSTRAP] Waiting for Argo CD CRD…"
 until kubectl get crd applications.argoproj.io >/dev/null 2>&1; do
   sleep 5
 done
 
-# Controller ready => sync will happen immediately (don’t fail the whole script if it’s slow)
 kubectl -n argocd rollout status deployment/argocd-application-controller --timeout=300s || true
 
-# Apply Argo CD Application manifests (Tripfinder, Monitoring stack, Monitoring manifests)
 echo "[BOOTSTRAP] Applying Argo CD Applications…"
 kubectl -n argocd apply -f "$REPO_DIR/k8s-helm/argocd/tripfinder-app.yaml"
 kubectl -n argocd apply -f "$REPO_DIR/k8s-helm/argocd/monitoring-app.yaml"
 kubectl -n argocd apply -f "$REPO_DIR/k8s-helm/argocd/monitoring-manifests-app.yaml"
 
 # --- Enable Alloy ServiceMonitor after Prometheus CRDs exist ---
-echo "[BOOTSTRAP] Waiting for Prometheus CRDs (ServiceMonitor) to be installed by kube-prometheus-stack…"
+echo "[BOOTSTRAP] Waiting for Prometheus CRDs (ServiceMonitor)…"
 until kubectl get crd servicemonitors.monitoring.coreos.com >/dev/null 2>&1; do
   sleep 5
 done
-
-# Optional: wait for the Prometheus Operator so it reconciles ServiceMonitors quickly
 kubectl -n monitoring rollout status deploy/prometheus-stack-kube-prom-operator --timeout=300s || true
 
 echo "[BOOTSTRAP] Enabling Alloy ServiceMonitor…"
@@ -478,7 +473,6 @@ helm upgrade --install alloy grafana/alloy \
   --create-namespace >> /var/log/k8s-bootstrap.log 2>&1 || {
   echo "[WARN] Alloy ServiceMonitor enable step failed (continuing)";
 }
-
 
 echo "[BOOTSTRAP] Jenkins, Argo CD, Traefik, and Monitoring installed."
 
