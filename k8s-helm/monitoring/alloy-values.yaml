@@ -14,32 +14,24 @@ serviceMonitor:
 alloy:
   configMap:
     content: |
-      discovery.kubernetes "pods" { role = "pod" }
-
-      discovery.relabel "pod_logs" {
-        targets = discovery.kubernetes.pods.targets
-        rule { source_labels = ["__meta_kubernetes_namespace"]; action = "replace"; target_label = "namespace" }
-        rule { source_labels = ["__meta_kubernetes_pod_name"];  action = "replace"; target_label = "pod" }
-        rule { source_labels = ["__meta_kubernetes_pod_container_name"]; action = "replace"; target_label = "container" }
-        rule {
-          source_labels = ["__meta_kubernetes_namespace","__meta_kubernetes_pod_container_name"]
-          action        = "replace"
-          target_label  = "job"
-          separator     = "/"
-          replacement   = "$1"
-        }
+      discovery.kubernetes "pods" {
+        role = "pod"
       }
 
       loki.source.kubernetes "pods" {
-        targets    = discovery.relabel.pod_logs.output
+        targets    = discovery.kubernetes.pods.targets
         forward_to = [loki.process.pods.receiver]
       }
 
       loki.process "pods" {
-        stage.static_labels { values = { cluster = "demo" } }
+        stage.static_labels {
+          values = { cluster = "demo" }
+        }
         forward_to = [loki.write.default.receiver]
       }
 
       loki.write "default" {
-        endpoint { url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push" }
+        endpoint {
+          url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+        }
       }
