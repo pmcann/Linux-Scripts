@@ -1,40 +1,28 @@
-# k8s-helm/monitoring/alloy-values.yaml
 controller:
   type: daemonset
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+    - key: "node-role.kubernetes.io/master"
+      operator: "Exists"
+      effect: "NoSchedule"
 
-# Run on control-plane/master too
-tolerations:
-  - key: "node-role.kubernetes.io/control-plane"
-    operator: "Exists"
-    effect: "NoSchedule"
-  - key: "node-role.kubernetes.io/master"
-    operator: "Exists"
-    effect: "NoSchedule"
-
-# Optional: scrape Alloy's own metrics with Prometheus
 serviceMonitor:
   enabled: true
 
 alloy:
-  # River configuration embedded into a ConfigMap
   configMap:
     content: |
-      // Discover all pods
-      discovery.kubernetes "pods" {
-        role = "pod"
-      }
+      discovery.kubernetes "pods" { role = "pod" }
 
-      // Relabel some helpful fields for Loki queries
       discovery.relabel "pod_logs" {
         targets = discovery.kubernetes.pods.targets
-
         rule { source_labels = ["__meta_kubernetes_namespace"]; action = "replace"; target_label = "namespace" }
         rule { source_labels = ["__meta_kubernetes_pod_name"];  action = "replace"; target_label = "pod" }
         rule { source_labels = ["__meta_kubernetes_pod_container_name"]; action = "replace"; target_label = "container" }
-
-        // Provide a stable "job" label as namespace/container
         rule {
-          source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_container_name"]
+          source_labels = ["__meta_kubernetes_namespace","__meta_kubernetes_pod_container_name"]
           action        = "replace"
           target_label  = "job"
           separator     = "/"
@@ -42,20 +30,16 @@ alloy:
         }
       }
 
-      // Read pod logs via the Kubernetes API (no hostPath mounts)
       loki.source.kubernetes "pods" {
         targets    = discovery.relabel.pod_logs.output
         forward_to = [loki.process.pods.receiver]
       }
 
-      // Processing: add a static cluster label (edit as you like)
       loki.process "pods" {
         stage.static_labels { values = { cluster = "demo" } }
         forward_to = [loki.write.default.receiver]
       }
 
-      // Write to in-cluster Loki
       loki.write "default" {
         endpoint { url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push" }
       }
-
