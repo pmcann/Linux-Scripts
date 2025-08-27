@@ -2,43 +2,16 @@
 config:
   clients:
     - url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
-
-  # Keep parsing simple but useful
   snippets:
     pipelineStages:
       - cri: {}   # parse CRI format into JSON (timestamp, stream, log)
 
-# DaemonSet runs on each node and tails /var/log/containers/*
-
-# Promtail also scrapes logs from the master (API server, scheduler, controller-manager) 
-# Minimal Promtail config: ship K8s container logs to Loki
-config:
-  clients:
-    - url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
-
-  # Keep parsing simple but useful
-  snippets:
-    pipelineStages:
-      - cri: {}   # parse CRI format into JSON (timestamp, stream, log)
-
-# DaemonSet runs on each node and tails /var/log/containers/*
-
-# Promtail also scrapes logs from the master (API server, scheduler, controller-manager) 
-        
+# Run on control-plane too (taints tolerated)
 tolerations:
   - key: "node-role.kubernetes.io/control-plane"
     operator: "Exists"
     effect: "NoSchedule"
-  - key: "node-role.kubernetes.io/master"
+  - key: "node-role.kubernetes.io/master"   # for older clusters
     operator: "Exists"
     effect: "NoSchedule"
-        
-        
-tolerations:
-  - key: "node-role.kubernetes.io/control-plane"
-    operator: "Exists"
-    effect: "NoSchedule"
-  - key: "node-role.kubernetes.io/master"
-    operator: "Exists"
-    effect: "NoSchedule"
-        
+                
